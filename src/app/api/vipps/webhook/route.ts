@@ -6,6 +6,7 @@ import {
   refundVippsPayment,
   toOre,
 } from "@/lib/vipps";
+import { generateInvoiceForSale } from "@/lib/invoice-service";
 import { OrderStatus } from "@/app/generated/prisma/enums";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -219,7 +220,31 @@ export async function POST(request: NextRequest) {
         await handleAuthorized(event);
         break;
 
-      case "CAPTURED":
+      case "CAPTURED": {
+        // Auto-generate invoice (receipt) for all PAID sales in this session
+        const capturedSales = await prisma.sale.findMany({
+          where: {
+            checkoutSessionId: event.reference,
+            status: OrderStatus.PAID,
+            invoiceNumber: null,
+          },
+          select: { id: true },
+        });
+        for (const s of capturedSales) {
+          try {
+            await generateInvoiceForSale(s.id, 0);
+          } catch (invoiceErr) {
+            console.error("[vipps-webhook] invoice generation failed for sale", s.id, invoiceErr);
+          }
+        }
+        await logAuditEvent("VIPPS_CAPTURED", event.reference, {
+          amountOre: event.amount.value,
+          pspReference: event.pspReference,
+          invoicesGenerated: capturedSales.length,
+        });
+        break;
+      }
+
       case "REFUNDED":
       case "CANCELLED":
       case "ABORTED":

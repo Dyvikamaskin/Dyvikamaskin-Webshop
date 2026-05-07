@@ -355,6 +355,13 @@ model AuditLog {
   actor Profile @relation(fields: [actorId], references: [id])
 }
 
+// Monotonically increasing invoice counter, one row per calendar year.
+// Atomic upsert ensures no two invoices share the same sequence number.
+model InvoiceCounter {
+  year    Int @id
+  lastSeq Int @default(0)
+}
+
 model Notification {
   id          String              @id @default(cuid())
   profileId   String
