@@ -31,6 +31,9 @@
     "resend": "^6.12.3",
     "zustand": "^5.0.13"
   },
+  "overrides": {
+    "@swc/helpers": "0.5.21"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
