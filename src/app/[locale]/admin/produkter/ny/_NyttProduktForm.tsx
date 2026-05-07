@@ -116,7 +116,7 @@ export default function NyttProduktForm({ categories }: Props) {
             name="name"
             type="text"
             required
-            placeholder="f.eks. Hydraulikkslange 1/2\""
+            placeholder="f.eks. Hydraulikkslange 1/2&quot;"
             style={inputStyle}
           />
           <p style={hintStyle}>La stå tom for å la berikelsespipelinen foreslå navn.</p>
