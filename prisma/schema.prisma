@@ -9,6 +9,23 @@ datasource db {
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
+enum MachineType {
+  EXCAVATOR          // Gravemaskin
+  MINI_EXCAVATOR     // Minigraver
+  WHEEL_LOADER       // Hjullaster
+  ARTICULATED_HAULER // Dumper
+  BULLDOZER          // Bulldoser
+  MOTOR_GRADER       // Motorgrader
+  COMPACTOR          // Komprimator / Valt
+  TELEHANDLER        // Teleskoplaster
+  CRANE              // Kran
+  BACKHOE_LOADER     // Bakgraver
+  SKID_STEER         // Kompaktlaster
+  PIPELAYER          // Rørlegger
+  FORKLIFT           // Gaffeltruck
+  OTHER              // Annet
+}
+
 enum CustomerType {
   CONSUMER
   BUSINESS
@@ -205,12 +222,50 @@ model Product {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  category       Category?      @relation(fields: [categoryId], references: [id])
+  category       Category?       @relation(fields: [categoryId], references: [id])
   stock          StoreStock[]
   saleItems      SaleItem[]
   priceHistory   PriceHistory[]
   stockTransfers StockTransfer[]
   stocktakeItems StocktakeItem[]
+  fitments       ProductFitment[]
+}
+
+// ─── Machine fitment ─────────────────────────────────────────────────────────
+
+model MachineMake {
+  id   String @id @default(cuid())
+  name String @unique  // "Volvo CE", "Caterpillar", "Komatsu"
+  slug String @unique  // "volvo-ce", "caterpillar", "komatsu"
+
+  models MachineModel[]
+}
+
+model MachineModel {
+  id       String      @id @default(cuid())
+  makeId   String
+  type     MachineType
+  name     String      // "EC380", "L120H", "D6T"
+  series   String?     // "EC-series", "L-series"
+  yearFrom Int?
+  yearTo   Int?        // null = still in production
+
+  make     MachineMake      @relation(fields: [makeId], references: [id], onDelete: Cascade)
+  fitments ProductFitment[]
+
+  @@unique([makeId, name])
+}
+
+model ProductFitment {
+  id        String  @id @default(cuid())
+  productId String
+  modelId   String
+  notes     String? // e.g. "Only for undercarriage serial A1234+"
+
+  product Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  model   MachineModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, modelId])
 }
 
 model StoreStock {

@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { href: "/admin/kunder",         label: "👥 Kunder" },
   { href: "/admin/kampanjer",      label: "🏷️ Kampanjer" },
   { href: "/admin/lager",          label: "🗂️ Lager" },
+  { href: "/admin/maskiner",       label: "⚙️ Maskiner" },
   { href: "/admin/stocktake",      label: "🔢 Varetelling" },
   { href: "/admin/produktforslag", label: "🔍 Produktforslag" },
   { href: "/admin/butikk",         label: "🏪 Butikkinnstillinger" },
