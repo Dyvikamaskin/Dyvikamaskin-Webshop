@@ -22,10 +22,6 @@ export default async function HomePage() {
 
   return (
     <main style={{ padding: "1.5rem", fontFamily: "sans-serif", maxWidth: "1200px", margin: "0 auto" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "1.5rem" }}>
-        Dyvikamaskin Webshop
-      </h1>
-
       <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: "2rem" }}>
         {/* Sidebar */}
         <aside>
