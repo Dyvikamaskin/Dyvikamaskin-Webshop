@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { buildLocationCode } from "@/lib/location-code";
 import {
   UserRole,
   OrderStatus,
@@ -193,4 +194,91 @@ export async function updateCustomerFormAction(
     isActive: formData.get("isActive") === "true",
   };
   await updateCustomerAction(profileId, data);
+}
+
+// ─── Location code actions ────────────────────────────────────────────────────
+
+/**
+ * Set or clear the location code on a StoreStock record.
+ * Validates format and handles unique-constraint conflicts gracefully.
+ *
+ * @param storeStockId  StoreStock.id
+ * @param parts         Five location segments; pass null/empty to clear.
+ */
+export async function updateLocationCodeAction(
+  storeStockId: string,
+  parts: {
+    zone: string;
+    aisle: string;
+    rack: string;
+    shelf: string;
+    slot: string;
+  } | null
+): Promise<AdminActionResult> {
+  const admin = await requireRole(UserRole.STORE_MANAGER);
+
+  const existing = await prisma.storeStock.findUnique({
+    where: { id: storeStockId },
+    select: {
+      locationCode: true,
+      storeId: true,
+      product: { select: { sku: true, name: true } },
+    },
+  });
+
+  if (!existing) return { ok: false, error: "Lagerbeholdning ikke funnet." };
+
+  // Build the new code (or null to clear)
+  const newCode = parts ? buildLocationCode(parts) : null;
+
+  if (parts && newCode === null) {
+    return { ok: false, error: "Ugyldig lokasjonskode — kontroller feltene." };
+  }
+
+  try {
+    await prisma.storeStock.update({
+      where: { id: storeStockId },
+      data: { locationCode: newCode },
+    });
+  } catch (err: unknown) {
+    // PostgreSQL unique violation → code 23505
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("23505") || msg.toLowerCase().includes("unique")) {
+      return {
+        ok: false,
+        error: `Lokasjonskode «${newCode}» er allerede i bruk i dette lageret.`,
+      };
+    }
+    throw err;
+  }
+
+  await logAudit(
+    admin.id,
+    "LOCATION_CODE_UPDATED",
+    "StoreStock",
+    storeStockId,
+    { locationCode: existing.locationCode },
+    { locationCode: newCode }
+  );
+
+  revalidatePath("/admin/lager");
+  return { ok: true };
+}
+
+/**
+ * FormData wrapper — reads the five field values and calls updateLocationCodeAction.
+ * A blank zone field means "clear the code".
+ */
+export async function updateLocationCodeFormAction(
+  storeStockId: string,
+  formData: FormData
+): Promise<void> {
+  const zone  = String(formData.get("zone")  ?? "").trim();
+  const aisle = String(formData.get("aisle") ?? "").trim();
+  const rack  = String(formData.get("rack")  ?? "").trim();
+  const shelf = String(formData.get("shelf") ?? "").trim();
+  const slot  = String(formData.get("slot")  ?? "").trim();
+
+  const parts = zone ? { zone, aisle, rack, shelf, slot } : null;
+  await updateLocationCodeAction(storeStockId, parts);
 }
