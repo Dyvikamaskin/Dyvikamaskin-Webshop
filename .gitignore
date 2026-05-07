@@ -37,8 +37,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local scratch / unpacked docx
+docs/handoff-temp/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
-/app/generated/prisma
+/src/app/generated/prisma
