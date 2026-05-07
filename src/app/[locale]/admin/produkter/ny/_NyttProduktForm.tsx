@@ -45,8 +45,10 @@ const hintStyle: React.CSSProperties = {
 
 export default function NyttProduktForm({ categories }: Props) {
   const router  = useRouter();
-  const [pending, setPending] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
+  const [pending,             setPending]             = useState(false);
+  const [error,               setError]               = useState<string | null>(null);
+  const [replacesPartNumbers, setReplacesPartNumbers] = useState<string[]>([]);
+  const [replaceInput,        setReplaceInput]        = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -56,15 +58,16 @@ export default function NyttProduktForm({ categories }: Props) {
     const fd = new FormData(e.currentTarget);
 
     const result = await createProductAction({
-      sku:              (fd.get("sku")              as string).trim(),
-      name:             (fd.get("name")             as string).trim(),
-      priceBase:        parseFloat(fd.get("priceBase") as string),
-      brand:            (fd.get("brand")            as string) || undefined,
-      shortDescription: (fd.get("shortDescription") as string) || undefined,
-      partNumber:       (fd.get("partNumber")       as string) || undefined,
-      categoryId:       (fd.get("categoryId")       as string) || undefined,
-      mvaRate:          parseFloat(fd.get("mvaRate") as string) || 0.25,
-      isActive:         fd.get("isActive") !== "false",
+      sku:                  (fd.get("sku")              as string).trim(),
+      name:                 (fd.get("name")             as string).trim(),
+      priceBase:            parseFloat(fd.get("priceBase") as string),
+      brand:                (fd.get("brand")            as string) || undefined,
+      shortDescription:     (fd.get("shortDescription") as string) || undefined,
+      partNumber:           (fd.get("partNumber")       as string) || undefined,
+      categoryId:           (fd.get("categoryId")       as string) || undefined,
+      mvaRate:              parseFloat(fd.get("mvaRate") as string) || 0.25,
+      isActive:             fd.get("isActive") !== "false",
+      replacesPartNumbers,
     });
 
     setPending(false);
@@ -75,6 +78,19 @@ export default function NyttProduktForm({ categories }: Props) {
     }
 
     router.push(`/admin/produkter/${encodeURIComponent(result.sku!)}/rediger`);
+  }
+
+  function addReplaceTag() {
+    const val = replaceInput.trim();
+    if (!val) return;
+    if (!replacesPartNumbers.includes(val)) {
+      setReplacesPartNumbers((prev) => [...prev, val]);
+    }
+    setReplaceInput("");
+  }
+
+  function removeReplaceTag(tag: string) {
+    setReplacesPartNumbers((prev) => prev.filter((t) => t !== tag));
   }
 
   return (
@@ -185,6 +201,89 @@ export default function NyttProduktForm({ categories }: Props) {
             placeholder="Valgfritt — lar du dette stå tomt, fyller pipelinen det inn."
             style={{ ...inputStyle, resize: "vertical" }}
           />
+        </div>
+
+        {/* Erstatter delenummer */}
+        <div>
+          <label style={labelStyle}>Erstatter delenummer(e)</label>
+          {/* Tag chips */}
+          {replacesPartNumbers.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.35rem",
+                marginBottom: "0.4rem",
+              }}
+            >
+              {replacesPartNumbers.map((tag) => (
+                <span
+                  key={tag}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.3rem",
+                    padding: "0.2rem 0.55rem",
+                    background: "#f1f5f9",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "4px",
+                    fontSize: "0.8rem",
+                    fontFamily: "monospace",
+                    color: "#0f172a",
+                  }}
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => removeReplaceTag(tag)}
+                    aria-label={`Fjern ${tag}`}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: "0",
+                      lineHeight: 1,
+                      color: "#64748b",
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {/* Input + add button */}
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <input
+              type="text"
+              value={replaceInput}
+              onChange={(e) => setReplaceInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); addReplaceTag(); }
+              }}
+              placeholder="f.eks. OLD-PART-42"
+              style={{ ...inputStyle, fontFamily: "monospace", flex: 1 }}
+            />
+            <button
+              type="button"
+              onClick={addReplaceTag}
+              style={{
+                padding: "0.55rem 0.9rem",
+                background: "#f1f5f9",
+                border: "1px solid #e2e8f0",
+                borderRadius: "6px",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                color: "#0f172a",
+              }}
+            >
+              + Legg til
+            </button>
+          </div>
+          <p style={hintStyle}>Delenummer(e) dette produktet erstatter. Trykk Enter eller &quot;Legg til&quot;.</p>
         </div>
 
         {/* Kategori */}

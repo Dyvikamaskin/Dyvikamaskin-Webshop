@@ -7,15 +7,16 @@ import { runFitmentEnrichmentForProduct } from "@/lib/fitment-enrichment";
 // ─── Create ───────────────────────────────────────────────────────────────────
 
 export interface CreateProductInput {
-  sku:               string;
-  name:              string;
-  priceBase:         number;
-  brand?:            string;
-  shortDescription?: string;
-  partNumber?:       string;
-  categoryId?:       string;
-  mvaRate?:          number;
-  isActive?:         boolean;
+  sku:                  string;
+  name:                 string;
+  priceBase:            number;
+  brand?:               string;
+  shortDescription?:    string;
+  partNumber?:          string;
+  categoryId?:          string;
+  mvaRate?:             number;
+  isActive?:            boolean;
+  replacesPartNumbers?: string[];
 }
 
 export async function createProductAction(
@@ -31,17 +32,22 @@ export async function createProductAction(
     const existing = await prisma.product.findUnique({ where: { sku: data.sku.trim() } });
     if (existing) return { ok: false, error: `SKU "${data.sku}" er allerede i bruk.` };
 
+    const replacesPartNumbers = data.replacesPartNumbers
+      ? [...new Set(data.replacesPartNumbers.map((p) => p.trim()).filter(Boolean))]
+      : [];
+
     await prisma.product.create({
       data: {
-        sku:              data.sku.trim(),
-        name:             data.name.trim(),
-        priceBase:        Number(data.priceBase),
-        brand:            data.brand?.trim()            || null,
-        shortDescription: data.shortDescription?.trim() || null,
-        partNumber:       data.partNumber?.trim()       || null,
-        categoryId:       data.categoryId               || null,
-        mvaRate:          data.mvaRate                  ?? 0.25,
-        isActive:         data.isActive                 ?? true,
+        sku:                  data.sku.trim(),
+        name:                 data.name.trim(),
+        priceBase:            Number(data.priceBase),
+        brand:                data.brand?.trim()            || null,
+        shortDescription:     data.shortDescription?.trim() || null,
+        partNumber:           data.partNumber?.trim()       || null,
+        categoryId:           data.categoryId               || null,
+        mvaRate:              data.mvaRate                  ?? 0.25,
+        isActive:             data.isActive                 ?? true,
+        replacesPartNumbers,
       },
     });
 
