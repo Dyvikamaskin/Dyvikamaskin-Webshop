@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import FitmentPicker from "@/components/fitment/FitmentPicker";
-import { addFitmentAction } from "@/app/actions/fitment";
+import { addFitmentAction, dismissFitmentProposalAction } from "@/app/actions/fitment";
 import type { FitmentProposal } from "@/lib/fitment-enrichment";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -30,6 +30,7 @@ interface Props {
   brand?: string | null;
   productName: string;
   initialFitments: Fitment[];
+  initialProposals?: FitmentProposal[];
 }
 
 // ─── Norwegian type labels ────────────────────────────────────────────────────
@@ -76,11 +77,13 @@ export default function FitmentSection({
   brand,
   productName,
   initialFitments,
+  initialProposals,
 }: Props) {
   const [fitments, setFitments] = useState<Fitment[]>(initialFitments);
-  const [proposals, setProposals] = useState<FitmentProposal[]>([]);
+  const [proposals, setProposals] = useState<FitmentProposal[]>(initialProposals ?? []);
   const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  // Mark as already searched if we have pre-loaded proposals from DB
+  const [searched, setSearched] = useState((initialProposals?.length ?? 0) > 0);
   const [error, setError] = useState<string | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
 
@@ -133,15 +136,17 @@ export default function FitmentSection({
       return;
     }
 
-    // Add to live fitments and remove from proposals
+    // Add to live fitments and remove from proposals list + DB
     setFitments((prev) => [...prev, result.fitment as Fitment]);
     setProposals((prev) => prev.filter((p) => p.modelId !== proposal.modelId));
+    void dismissFitmentProposalAction(sku, proposal.modelId);
   }
 
   // ── Ignore proposal ──────────────────────────────────────────────
 
   function handleIgnore(modelId: string) {
     setProposals((prev) => prev.filter((p) => p.modelId !== modelId));
+    void dismissFitmentProposalAction(sku, modelId);
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────

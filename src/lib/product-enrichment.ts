@@ -108,6 +108,51 @@ async function fetchWikidata(query: string): Promise<{
   }
 }
 
+// ─── Direct product enrichment (for created/imported products) ───────────────
+
+/**
+ * Runs enrichment against an existing Product record and fills in only the
+ * fields that are currently null/empty.  Does NOT create a ProductDraft.
+ * Safe to call fire-and-forget (never throws).
+ */
+export async function enrichProductDirectly(sku: string): Promise<void> {
+  try {
+    const product = await prisma.product.findUnique({ where: { sku } });
+    if (!product) return;
+
+    // Build a rich query from whatever identifiers we have
+    const queryParts = [product.partNumber, product.brand, product.name, sku].filter(Boolean);
+    const query      = queryParts.join(" ").trim();
+    const codeForIcecat = product.partNumber ?? product.barcodes[0] ?? sku;
+
+    const [ddg, icecat, wiki] = await Promise.all([
+      fetchDuckDuckGo(query),
+      fetchIcecat(codeForIcecat),
+      fetchWikidata(query),
+    ]);
+
+    const merged = {
+      name:  ddg.name  || icecat.name  || wiki.name  || null,
+      brand: ddg.brand || icecat.brand || null,
+      desc:  ddg.desc  || icecat.desc  || wiki.desc  || null,
+      image: ddg.image || icecat.image || null,
+    };
+
+    // Only fill fields that are currently empty — never overwrite admin data
+    const updates: Record<string, string> = {};
+    if (!product.name             && merged.name)  updates.name             = merged.name;
+    if (!product.brand            && merged.brand) updates.brand            = merged.brand;
+    if (!product.shortDescription && merged.desc)  updates.shortDescription = merged.desc;
+    if (!product.mainImage        && merged.image) updates.mainImage        = merged.image;
+
+    if (Object.keys(updates).length > 0) {
+      await prisma.product.update({ where: { sku }, data: updates });
+    }
+  } catch {
+    // Best-effort — never throw
+  }
+}
+
 // ─── Pipeline ─────────────────────────────────────────────────────────────────
 
 export async function runEnrichmentPipeline(

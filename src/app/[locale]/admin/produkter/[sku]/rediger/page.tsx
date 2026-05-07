@@ -9,17 +9,40 @@ interface PageProps {
 export default async function RedigerProduktPage({ params }: PageProps) {
   const { sku } = await params;
 
-  const product = await prisma.product.findUnique({
-    where: { sku },
-    include: {
-      category: true,
-      fitments: {
-        include: { model: { include: { make: true } } },
+  const [product, rawProposals] = await Promise.all([
+    prisma.product.findUnique({
+      where: { sku },
+      include: {
+        category: true,
+        fitments: { include: { model: { include: { make: true } } } },
       },
-    },
-  });
+    }),
+    prisma.fitmentProposal.findMany({
+      where: { productSku: sku },
+      include: { model: { include: { make: true } } },
+    }),
+  ]);
 
   if (!product) notFound();
+
+  // Map DB records to the FitmentProposal shape expected by FitmentSection
+  const confOrder = { high: 0, medium: 1, low: 2 } as Record<string, number>;
+  const initialProposals = rawProposals
+    .map((p) => ({
+      modelId:      p.modelId,
+      modelName:    p.model.name,
+      makeId:       p.model.makeId,
+      makeName:     p.model.make.name,
+      type:         p.model.type as string,
+      confidence:   p.confidence as "high" | "medium" | "low",
+      mentionCount: p.mentionCount,
+      sources:      p.sources as string[],
+    }))
+    .sort(
+      (a, b) =>
+        (confOrder[a.confidence] ?? 3) - (confOrder[b.confidence] ?? 3) ||
+        b.mentionCount - a.mentionCount
+    );
 
   return (
     <div style={{ padding: "2rem", maxWidth: "900px" }}>
@@ -110,6 +133,7 @@ export default async function RedigerProduktPage({ params }: PageProps) {
         brand={product.brand}
         productName={product.name}
         initialFitments={product.fitments}
+        initialProposals={initialProposals}
       />
     </div>
   );

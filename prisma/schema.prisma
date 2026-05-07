@@ -228,7 +228,8 @@ model Product {
   priceHistory   PriceHistory[]
   stockTransfers StockTransfer[]
   stocktakeItems StocktakeItem[]
-  fitments       ProductFitment[]
+  fitments           ProductFitment[]
+  fitmentProposals   FitmentProposal[]
 }
 
 // ─── Machine fitment ─────────────────────────────────────────────────────────
@@ -250,8 +251,9 @@ model MachineModel {
   yearFrom Int?
   yearTo   Int?        // null = still in production
 
-  make     MachineMake      @relation(fields: [makeId], references: [id], onDelete: Cascade)
-  fitments ProductFitment[]
+  make             MachineMake      @relation(fields: [makeId], references: [id], onDelete: Cascade)
+  fitments         ProductFitment[]
+  fitmentProposals FitmentProposal[]
 
   @@unique([makeId, name])
 }
@@ -489,4 +491,23 @@ model ProductRequest {
 
   draft       ProductDraft? @relation(fields: [draftId], references: [id])
   requestedBy Profile?      @relation(fields: [requestedById], references: [id])
+}
+
+// ─── Fitment proposals (auto-generated, pending admin review) ────────────────
+
+/// Fitment suggestions generated automatically by the enrichment pipeline.
+/// Shown to the admin on the product edit page so they can accept or ignore.
+model FitmentProposal {
+  id           String   @id @default(cuid())
+  productSku   String
+  modelId      String
+  confidence   String   // "high" | "medium" | "low"
+  mentionCount Int      @default(1)
+  sources      Json     // string[]
+  createdAt    DateTime @default(now())
+
+  product Product      @relation(fields: [productSku], references: [sku], onDelete: Cascade)
+  model   MachineModel @relation(fields: [modelId],   references: [id],  onDelete: Cascade)
+
+  @@unique([productSku, modelId])
 }

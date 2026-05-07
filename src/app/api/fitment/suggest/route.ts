@@ -1,5 +1,6 @@
 import { type NextRequest } from "next/server";
 import { searchFitments } from "@/lib/fitment-enrichment";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +20,28 @@ export async function POST(request: NextRequest) {
       brand:      body.brand,
       name:       body.name,
     });
+
+    // Persist fresh proposals so they survive page reloads (fire-and-forget)
+    if (body.sku && proposals.length > 0) {
+      const sku = body.sku;
+      void (async () => {
+        try {
+          await prisma.$transaction([
+            prisma.fitmentProposal.deleteMany({ where: { productSku: sku } }),
+            prisma.fitmentProposal.createMany({
+              data: proposals.map((p) => ({
+                productSku:   sku,
+                modelId:      p.modelId,
+                confidence:   p.confidence,
+                mentionCount: p.mentionCount,
+                sources:      p.sources as unknown as object,
+              })),
+              skipDuplicates: true,
+            }),
+          ]);
+        } catch { /* best-effort */ }
+      })();
+    }
 
     return Response.json({ ok: true, proposals });
   } catch (err: unknown) {

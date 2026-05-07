@@ -107,6 +107,46 @@ async function fetchPageText(url: string): Promise<string> {
   }
 }
 
+// ─── Background enrichment for a product (stores proposals in DB) ────────────
+
+/**
+ * Runs fitment auto-suggest for an existing product and upserts the results
+ * into the FitmentProposal table so they appear automatically on the edit page.
+ * Safe to call fire-and-forget (never throws).
+ */
+export async function runFitmentEnrichmentForProduct(sku: string): Promise<void> {
+  try {
+    const product = await prisma.product.findUnique({ where: { sku } });
+    if (!product) return;
+
+    const proposals = await searchFitments({
+      sku,
+      partNumber: product.partNumber ?? undefined,
+      brand:      product.brand      ?? undefined,
+      name:       product.name,
+    });
+
+    if (proposals.length === 0) return;
+
+    // Replace any stale proposals for this product
+    await prisma.$transaction([
+      prisma.fitmentProposal.deleteMany({ where: { productSku: sku } }),
+      prisma.fitmentProposal.createMany({
+        data: proposals.map((p) => ({
+          productSku:   sku,
+          modelId:      p.modelId,
+          confidence:   p.confidence,
+          mentionCount: p.mentionCount,
+          sources:      p.sources as unknown as object,
+        })),
+        skipDuplicates: true,
+      }),
+    ]);
+  } catch {
+    // Best-effort — never throw
+  }
+}
+
 // ─── Pipeline ─────────────────────────────────────────────────────────────────
 
 export async function searchFitments(params: SearchParams): Promise<FitmentProposal[]> {

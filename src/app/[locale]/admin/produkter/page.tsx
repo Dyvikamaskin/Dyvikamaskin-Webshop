@@ -16,9 +16,10 @@ export default async function ProdukterPage() {
       <div
         style={{
           display: "flex",
-          alignItems: "baseline",
+          alignItems: "center",
           gap: "0.75rem",
           marginBottom: "1.5rem",
+          flexWrap: "wrap",
         }}
       >
         <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0f172a", margin: 0 }}>
@@ -37,6 +38,47 @@ export default async function ProdukterPage() {
         >
           {products.length} produkter
         </span>
+
+        {/* ── Action buttons ──────────────────────────────────────── */}
+        <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+          <Link
+            href="/admin/produkter/importer"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.35rem",
+              padding: "0.45rem 0.9rem",
+              background: "#f8fafc",
+              color: "#374151",
+              border: "1px solid #e2e8f0",
+              borderRadius: "6px",
+              textDecoration: "none",
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            📥 Importer CSV
+          </Link>
+          <Link
+            href="/admin/produkter/ny"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.35rem",
+              padding: "0.45rem 0.9rem",
+              background: "#0f172a",
+              color: "#fff",
+              borderRadius: "6px",
+              textDecoration: "none",
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            ➕ Nytt produkt
+          </Link>
+        </div>
       </div>
 
       {/* ── Table card ────────────────────────────────────────────────── */}
@@ -58,7 +100,15 @@ export default async function ProdukterPage() {
               textAlign: "center",
             }}
           >
-            Ingen produkter ennå. Legg til via lagersiden.
+            Ingen produkter ennå.{" "}
+            <Link href="/admin/produkter/ny" style={{ color: "#2563eb" }}>
+              Legg til ett produkt
+            </Link>{" "}
+            eller{" "}
+            <Link href="/admin/produkter/importer" style={{ color: "#2563eb" }}>
+              importer fra CSV
+            </Link>
+            .
           </p>
         ) : (
           <table

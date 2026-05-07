@@ -67,6 +67,19 @@ export async function addFitmentAction(
   }
 }
 
+export async function dismissFitmentProposalAction(
+  productSku: string,
+  modelId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await prisma.fitmentProposal.deleteMany({ where: { productSku, modelId } });
+    return { ok: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
+  }
+}
+
 export async function removeFitmentAction(
   productId: string,
   modelId: string
