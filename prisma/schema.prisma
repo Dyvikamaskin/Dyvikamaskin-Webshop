@@ -263,6 +263,7 @@ model Sale {
   trackingNumber    String?
   isManualOverride  Boolean           @default(false)
   kidNumber         String?
+  shippingProductId String?           // Bring product code e.g. "PAKKE_TIL_HENTESTED"
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   paidAt            DateTime?
