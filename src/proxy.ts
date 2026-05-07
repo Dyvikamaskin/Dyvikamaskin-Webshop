@@ -18,25 +18,32 @@ export async function proxy(request: NextRequest) {
 
   // 2. Attach a Supabase client that writes refreshed session cookies
   //    directly onto the next-intl response.
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => request.cookies.getAll(),
-        setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
-        },
-      },
-    }
-  );
+  //    Guard: skip if env vars are not yet configured (e.g. during initial
+  //    deployment before Supabase credentials are set). Public pages continue
+  //    to work; protected routes redirect to /login (user is null).
+  let user = null;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Always use getUser() — never getSession() — to prevent spoofed JWTs.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  if (supabaseUrl && supabaseAnonKey) {
+    try {
+      const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+        cookies: {
+          getAll: () => request.cookies.getAll(),
+          setAll: (cookiesToSet) => {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            });
+          },
+        },
+      });
+      // Always use getUser() — never getSession() — to prevent spoofed JWTs.
+      const { data } = await supabase.auth.getUser();
+      user = data.user;
+    } catch {
+      // Supabase unreachable — serve public pages without auth.
+    }
+  }
 
   const { pathname } = request.nextUrl;
 
