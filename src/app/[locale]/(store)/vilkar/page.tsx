@@ -22,7 +22,7 @@ export default function VilkarPage() {
 
       <Section title="1. Selger">
         <p>
-          <strong>Dyvikamaskin</strong> drives av Ventura Offshore AS.
+          <strong>Dyvika Maskin AS</strong>
         </p>
         <dl style={dlStyle}>
           <dt style={dtStyle}>Organisasjonsnummer</dt>
