@@ -58,6 +58,29 @@ export async function createProductAction(
   }
 }
 
+// ─── Replaces part numbers ────────────────────────────────────────────────────
+
+/**
+ * Overwrites the replacesPartNumbers array for a product.
+ * Deduplicates and trims values before saving.
+ */
+export async function updateReplacesPartNumbersAction(
+  sku: string,
+  partNumbers: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const cleaned = [...new Set(partNumbers.map((p) => p.trim()).filter(Boolean))];
+    await prisma.product.update({
+      where: { sku },
+      data:  { replacesPartNumbers: cleaned },
+    });
+    return { ok: true };
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err.message : "Ukjent feil";
+    return { ok: false, error };
+  }
+}
+
 // ─── Update ───────────────────────────────────────────────────────────────────
 
 export async function updateProductBasicAction(

@@ -214,8 +214,9 @@ model Product {
   weight               Int?
   dimensions           Json?
   mainImage            String?
-  galleryImages        String[]
-  barcodes             String[]
+  galleryImages           String[]
+  barcodes                String[]
+  replacesPartNumbers     String[]
   isActive             Boolean  @default(true)
   isDiscontinued       Boolean  @default(false)
   categoryId           String?

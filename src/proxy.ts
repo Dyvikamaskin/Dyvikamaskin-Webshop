@@ -4,10 +4,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { routing } from "@/i18n/routing";
 
 // Routes that require an authenticated session
-const PROTECTED_PREFIXES = ["/admin", "/store", "/account"];
+const PROTECTED_PREFIXES = ["/admin", "/store", "/account", "/konto"];
 
-// Routes only for unauthenticated users
-const AUTH_ONLY_PREFIXES = ["/login", "/register"];
+// Routes only for unauthenticated users (logged-in users are sent to /)
+const AUTH_ONLY_PREFIXES = ["/login", "/register", "/registrer"];
 
 const handleI18n = createIntlMiddleware(routing);
 

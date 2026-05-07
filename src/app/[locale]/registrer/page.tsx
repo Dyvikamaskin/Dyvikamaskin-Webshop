@@ -1,30 +1,22 @@
 import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import LoginForm from "./_LoginForm";
+import RegisterForm from "./_RegisterForm";
 
-export const metadata = { title: "Logg inn — Dyvikamaskin" };
+export const metadata = { title: "Registrer deg — Dyvikamaskin" };
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>;
-}) {
-  const { next } = await searchParams;
-  const cookieStore = await cookies();
-
-  // Redirect already-authenticated users
+export default async function RegisterPage() {
+  const cookieStore     = await cookies();
   const supabaseUrl     = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  // Already logged in → send home
   if (supabaseUrl && supabaseAnonKey) {
     const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: () => {},
-      },
+      cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} },
     });
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) redirect(next ?? "/");
+    if (user) redirect("/");
   }
 
   return (
@@ -49,17 +41,16 @@ export default async function LoginPage({
           boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
         }}
       >
-        {/* Logo / brand */}
         <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
           <p style={{ fontSize: "0.75rem", color: "#94a3b8", margin: "0 0 0.25rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
             Dyvikamaskin
           </p>
           <h1 style={{ fontSize: "1.4rem", fontWeight: 700, color: "#0f172a", margin: 0 }}>
-            Logg inn
+            Opprett konto
           </h1>
         </div>
 
-        <LoginForm next={next} />
+        <RegisterForm />
       </div>
     </main>
   );

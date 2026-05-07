@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import FitmentSection from "./_FitmentSection";
 import EnrichmentCard from "./_EnrichmentCard";
+import ReplacesPartNumbersSection from "./_ReplacesPartNumbersSection";
 
 interface PageProps {
   params: Promise<{ sku: string }>;
@@ -127,6 +128,13 @@ export default async function RedigerProduktPage({ params }: PageProps) {
           />
           <InfoRow label="Kategori"     value={product.category?.name} />
           <InfoRow label="Aktiv"        value={product.isActive ? "Ja" : "Nei"} />
+          {product.replacesPartNumbers.length > 0 && (
+            <InfoRow
+              label="Erstatter"
+              value={product.replacesPartNumbers.join(", ")}
+              mono
+            />
+          )}
         </dl>
 
         <p
@@ -144,6 +152,12 @@ export default async function RedigerProduktPage({ params }: PageProps) {
           Bruk lager-siden for å redigere priser og lagerbeholdning.
         </p>
       </div>
+
+      {/* ── Replaces part numbers ────────────────────────────────────── */}
+      <ReplacesPartNumbersSection
+        sku={product.sku}
+        initial={product.replacesPartNumbers}
+      />
 
       {/* ── Fitment section ──────────────────────────────────────────── */}
       <FitmentSection
