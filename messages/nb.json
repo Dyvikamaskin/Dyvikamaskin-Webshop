@@ -1,0 +1,100 @@
+{
+  "nav": {
+    "home": "Hjem",
+    "products": "Produkter",
+    "cart": "Handlekurv",
+    "login": "Logg inn",
+    "logout": "Logg ut",
+    "account": "Min konto",
+    "admin": "Administrasjon",
+    "search": "Søk"
+  },
+  "auth": {
+    "login": "Logg inn",
+    "register": "Registrer deg",
+    "logout": "Logg ut",
+    "email": "E-post",
+    "password": "Passord",
+    "forgotPassword": "Glemt passord?",
+    "noAccount": "Har du ikke konto?",
+    "hasAccount": "Har du allerede konto?",
+    "loginWithEmail": "Logg inn med e-post",
+    "sendMagicLink": "Send innloggingslenke"
+  },
+  "errors": {
+    "unauthorized": "Du har ikke tilgang til denne siden.",
+    "notFound": "Siden ble ikke funnet.",
+    "serverError": "Det oppstod en feil. Prøv igjen.",
+    "required": "Dette feltet er påkrevd.",
+    "invalidEmail": "Ugyldig e-postadresse."
+  },
+  "common": {
+    "save": "Lagre",
+    "cancel": "Avbryt",
+    "delete": "Slett",
+    "edit": "Rediger",
+    "close": "Lukk",
+    "confirm": "Bekreft",
+    "back": "Tilbake",
+    "loading": "Laster...",
+    "search": "Søk",
+    "noResults": "Ingen resultater funnet.",
+    "yes": "Ja",
+    "no": "Nei"
+  },
+  "product": {
+    "addToCart": "Legg i handlekurv",
+    "outOfStock": "Ikke på lager",
+    "inStock": "På lager",
+    "sku": "Varenr.",
+    "brand": "Merke",
+    "category": "Kategori",
+    "priceInclMva": "{price} kr inkl. MVA",
+    "priceExclMva": "{price} kr eks. MVA",
+    "whereof": "hvorav MVA 25%: {mva} kr",
+    "minimumOrder": "Minimum {qty} stk"
+  },
+  "cart": {
+    "title": "Handlekurv",
+    "empty": "Handlekurven er tom.",
+    "total": "Totalt",
+    "totalInclMva": "Totalt inkl. MVA",
+    "totalExclMva": "Totalt eks. MVA",
+    "mvaAmount": "MVA (25%)",
+    "checkout": "Til kasse",
+    "continueShopping": "Fortsett å handle",
+    "remove": "Fjern",
+    "quantity": "Antall"
+  },
+  "checkout": {
+    "title": "Kasse",
+    "delivery": "Levering",
+    "payment": "Betaling",
+    "summary": "Ordresammendrag",
+    "placeOrder": "Legg inn bestilling",
+    "payWithVipps": "Betal med Vipps"
+  },
+  "order": {
+    "confirmed": "Bestilling bekreftet",
+    "orderNumber": "Ordrenummer",
+    "status": "Status",
+    "pending": "Venter",
+    "paid": "Betalt",
+    "invoiced": "Fakturert"
+  },
+  "admin": {
+    "dashboard": "Oversikt",
+    "products": "Produkter",
+    "orders": "Bestillinger",
+    "customers": "Kunder",
+    "stock": "Lager",
+    "settings": "Innstillinger"
+  },
+  "customerType": {
+    "consumer": "Privatkunde",
+    "business": "Bedrift",
+    "selectType": "Velg kundetype",
+    "consumerDescription": "Privatkunde — pris inkl. MVA",
+    "businessDescription": "Bedriftskunde — pris eks. MVA"
+  }
+}

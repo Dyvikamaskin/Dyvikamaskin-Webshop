@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+const withNextIntl = createNextIntlPlugin(
+  // Points to our getRequestConfig — default path, but explicit is safer.
+  "./src/i18n/request.ts"
+);
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Strict mode enabled for catching React issues early
+  reactStrictMode: true,
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);
