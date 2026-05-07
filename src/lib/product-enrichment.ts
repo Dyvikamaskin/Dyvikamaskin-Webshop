@@ -108,11 +108,18 @@ async function fetchWikidata(query: string): Promise<{
   }
 }
 
-// ─── Direct product enrichment (for created/imported products) ───────────────
+// ─── Enrichment proposal for an existing product ─────────────────────────────
 
 /**
- * Runs enrichment against an existing Product record and fills in only the
- * fields that are currently null/empty.  Does NOT create a ProductDraft.
+ * Runs enrichment for an existing Product and stores the results as a
+ * ProductEnrichmentProposal for admin review.
+ *
+ * Proposals are NEVER auto-applied — an admin must explicitly accept or dismiss
+ * each suggested field on the product edit page.
+ *
+ * Runs even when the product already has values for the fields: the admin may
+ * want to replace existing data with the enriched suggestion.
+ *
  * Safe to call fire-and-forget (never throws).
  */
 export async function enrichProductDirectly(sku: string): Promise<void> {
@@ -131,6 +138,8 @@ export async function enrichProductDirectly(sku: string): Promise<void> {
       fetchWikidata(query),
     ]);
 
+    const rawResponses = { duckduckgo: ddg, icecat, wikidata: wiki };
+
     const merged = {
       name:  ddg.name  || icecat.name  || wiki.name  || null,
       brand: ddg.brand || icecat.brand || null,
@@ -138,16 +147,46 @@ export async function enrichProductDirectly(sku: string): Promise<void> {
       image: ddg.image || icecat.image || null,
     };
 
-    // Only fill fields that are currently empty — never overwrite admin data
-    const updates: Record<string, string> = {};
-    if (!product.name             && merged.name)  updates.name             = merged.name;
-    if (!product.brand            && merged.brand) updates.brand            = merged.brand;
-    if (!product.shortDescription && merged.desc)  updates.shortDescription = merged.desc;
-    if (!product.mainImage        && merged.image) updates.mainImage        = merged.image;
+    // Nothing found — nothing to propose
+    if (!merged.name && !merged.brand && !merged.desc && !merged.image) return;
 
-    if (Object.keys(updates).length > 0) {
-      await prisma.product.update({ where: { sku }, data: updates });
-    }
+    // Build provenance
+    const sources: DraftField[] = [];
+    const addSource = (src: string, field: string, value: string | undefined) => {
+      if (value) sources.push({ source: src, field, value });
+    };
+    addSource("duckduckgo", "name",  ddg.name);
+    addSource("duckduckgo", "desc",  ddg.desc);
+    addSource("duckduckgo", "image", ddg.image);
+    addSource("icecat",     "name",  icecat.name);
+    addSource("icecat",     "brand", icecat.brand);
+    addSource("icecat",     "desc",  icecat.desc);
+    addSource("icecat",     "image", icecat.image);
+    addSource("wikidata",   "name",  wiki.name);
+    addSource("wikidata",   "desc",  wiki.desc);
+
+    // Upsert — replaces any previous pending proposal for this product
+    await prisma.productEnrichmentProposal.upsert({
+      where:  { productSku: sku },
+      create: {
+        productSku:     sku,
+        suggestedName:  merged.name,
+        suggestedBrand: merged.brand,
+        suggestedDesc:  merged.desc,
+        suggestedImage: merged.image,
+        sources:        sources  as object,
+        enrichmentData: rawResponses as object,
+      },
+      update: {
+        suggestedName:  merged.name,
+        suggestedBrand: merged.brand,
+        suggestedDesc:  merged.desc,
+        suggestedImage: merged.image,
+        sources:        sources  as object,
+        enrichmentData: rawResponses as object,
+        createdAt:      new Date(),
+      },
+    });
   } catch {
     // Best-effort — never throw
   }

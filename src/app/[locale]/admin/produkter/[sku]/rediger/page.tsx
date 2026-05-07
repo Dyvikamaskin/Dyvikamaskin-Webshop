@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import FitmentSection from "./_FitmentSection";
+import EnrichmentCard from "./_EnrichmentCard";
 
 interface PageProps {
   params: Promise<{ sku: string }>;
@@ -9,7 +10,7 @@ interface PageProps {
 export default async function RedigerProduktPage({ params }: PageProps) {
   const { sku } = await params;
 
-  const [product, rawProposals] = await Promise.all([
+  const [product, rawProposals, enrichmentProposal] = await Promise.all([
     prisma.product.findUnique({
       where: { sku },
       include: {
@@ -21,6 +22,7 @@ export default async function RedigerProduktPage({ params }: PageProps) {
       where: { productSku: sku },
       include: { model: { include: { make: true } } },
     }),
+    prisma.productEnrichmentProposal.findUnique({ where: { productSku: sku } }),
   ]);
 
   if (!product) notFound();
@@ -55,6 +57,25 @@ export default async function RedigerProduktPage({ params }: PageProps) {
           {product.name}
         </h1>
       </div>
+
+      {/* ── Enrichment proposal card (shown when pipeline has suggestions) ── */}
+      {enrichmentProposal && (
+        <EnrichmentCard
+          sku={product.sku}
+          proposal={{
+            suggestedName:  enrichmentProposal.suggestedName,
+            suggestedBrand: enrichmentProposal.suggestedBrand,
+            suggestedDesc:  enrichmentProposal.suggestedDesc,
+            suggestedImage: enrichmentProposal.suggestedImage,
+          }}
+          currentValues={{
+            name:             product.name,
+            brand:            product.brand,
+            shortDescription: product.shortDescription,
+            mainImage:        product.mainImage,
+          }}
+        />
+      )}
 
       {/* ── Basic info card ──────────────────────────────────────────── */}
       <div
