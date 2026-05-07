@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth";
 import { UserRole } from "@/app/generated/prisma/enums";
 import { compareLocationCodes, LOCATION_ZONES } from "@/lib/location-code";
 import LocationRow from "./_LocationRow";
+import PrintLabelsButton from "./_PrintLabelsButton";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Lagerlokasjoner — Admin" };
@@ -85,9 +86,20 @@ export default async function LagerPage({ searchParams }: Props) {
 
   return (
     <div style={{ padding: "2rem", maxWidth: "1200px" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0f172a", marginBottom: "0.5rem" }}>
-        Lagerlokasjoner
-      </h1>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "0.5rem", flexWrap: "wrap", gap: "1rem" }}>
+        <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0f172a", margin: 0 }}>
+          Lagerlokasjoner
+        </h1>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+          <PrintLabelsButton storeId={selectedStoreId} storeName={stores.find((s) => s.id === selectedStoreId)?.name ?? "lager"} />
+          <a
+            href="/admin/stocktake"
+            style={{ padding: "0.5rem 1.1rem", background: "#7c3aed", color: "#fff", borderRadius: "6px", textDecoration: "none", fontSize: "0.875rem", fontWeight: 600 }}
+          >
+            📦 Varetelling
+          </a>
+        </div>
+      </div>
       <p style={{ color: "#64748b", fontSize: "0.875rem", marginBottom: "1.5rem" }}>
         Tildel hierarkisk lokasjonskode til hvert produkt i lageret.
         Format: <code style={{ background: "#f1f5f9", padding: "0.1rem 0.4rem", borderRadius: "4px" }}>SONE-GANG-REOL-NIVÅ-PLASS</code>

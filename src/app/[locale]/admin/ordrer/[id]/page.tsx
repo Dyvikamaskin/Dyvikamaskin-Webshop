@@ -62,7 +62,7 @@ export default async function OrderDetailPage({ params }: Props) {
         </Link>
       </nav>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.75rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.75rem", flexWrap: "wrap" }}>
         <h1 style={{ fontSize: "1.4rem", fontWeight: 700, color: "#0f172a", margin: 0 }}>
           Ordre
         </h1>
@@ -71,6 +71,24 @@ export default async function OrderDetailPage({ params }: Props) {
         </code>
         <StatusBadge status={sale.status} />
         <FulfillmentBadge status={sale.fulfillmentStatus} />
+        {/* Picking list download — opens in new tab */}
+        <a
+          href={`/api/picking-list/${sale.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            marginLeft: "auto",
+            padding: "0.4rem 1rem",
+            background: "#0f172a",
+            color: "#fff",
+            borderRadius: "6px",
+            textDecoration: "none",
+            fontSize: "0.8rem",
+            fontWeight: 600,
+          }}
+        >
+          📋 Last ned plukkliste
+        </a>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.25rem", marginBottom: "1.5rem" }}>

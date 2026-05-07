@@ -7,11 +7,12 @@ interface AdminLayoutProps {
 }
 
 const NAV_LINKS = [
-  { href: "/admin",          label: "📊 Oversikt" },
-  { href: "/admin/ordrer",   label: "📦 Ordrer" },
-  { href: "/admin/kunder",   label: "👥 Kunder" },
-  { href: "/admin/kampanjer",label: "🏷️ Kampanjer" },
-  { href: "/admin/lager",    label: "🗂️ Lager" },
+  { href: "/admin",            label: "📊 Oversikt" },
+  { href: "/admin/ordrer",     label: "📦 Ordrer" },
+  { href: "/admin/kunder",     label: "👥 Kunder" },
+  { href: "/admin/kampanjer",  label: "🏷️ Kampanjer" },
+  { href: "/admin/lager",      label: "🗂️ Lager" },
+  { href: "/admin/stocktake",  label: "🔢 Varetelling" },
 ];
 
 export default async function AdminLayout({ children }: AdminLayoutProps) {
