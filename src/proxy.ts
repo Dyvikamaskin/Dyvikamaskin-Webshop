@@ -11,7 +11,7 @@ const AUTH_ONLY_PREFIXES = ["/login", "/register"];
 
 const handleI18n = createIntlMiddleware(routing);
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // 1. Run next-intl first — it handles locale detection and canonical
   //    redirects. Its response becomes our base response.
   const response = handleI18n(request);
