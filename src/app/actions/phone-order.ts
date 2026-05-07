@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { validateCart } from "@/lib/cart";
 import { determineBatchSlot } from "@/lib/batch";
+import { notifyOrderConfirmed } from "@/lib/notification-service";
 import { requireRole } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { generateInvoiceForSale } from "@/lib/invoice-service";
@@ -138,13 +139,14 @@ export async function createPhoneOrderAction(
     }
   });
 
-  // Auto-generate invoice for every sub-order
+  // Auto-generate invoice and fire notifications for every sub-order
   for (const saleId of saleIds) {
     try {
       await generateInvoiceForSale(saleId, dueDays);
     } catch (err) {
       console.error("[phone-order] invoice generation failed", saleId, err);
     }
+    void notifyOrderConfirmed(saleId);
   }
 
   await logAudit(admin.id, "PHONE_ORDER_CREATED", "Sale", checkoutSessionId, null, {

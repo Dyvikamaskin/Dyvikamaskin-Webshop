@@ -7,6 +7,7 @@ import {
   toOre,
 } from "@/lib/vipps";
 import { generateInvoiceForSale } from "@/lib/invoice-service";
+import { notifyOrderConfirmed, checkAndNotifyLowStock } from "@/lib/notification-service";
 import { OrderStatus } from "@/app/generated/prisma/enums";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -129,6 +130,10 @@ async function handleAuthorized(event: VippsWebhookEvent) {
       });
 
       successfulSaleIds.push(sale.id);
+
+      // Low stock check after deduction (non-blocking)
+      const deductedProductIds = sale.items.map((i) => i.productId);
+      void checkAndNotifyLowStock(sale.storeId, deductedProductIds);
     } catch (stockError) {
       console.error("[vipps-webhook] stock deduction failed for sale", sale.id, stockError);
       failedSales.push(sale);
@@ -236,6 +241,8 @@ export async function POST(request: NextRequest) {
           } catch (invoiceErr) {
             console.error("[vipps-webhook] invoice generation failed for sale", s.id, invoiceErr);
           }
+          // Order confirmed email (non-blocking)
+          void notifyOrderConfirmed(s.id);
         }
         await logAuditEvent("VIPPS_CAPTURED", event.reference, {
           amountOre: event.amount.value,

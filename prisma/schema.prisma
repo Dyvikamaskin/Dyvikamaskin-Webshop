@@ -74,9 +74,11 @@ enum NotificationChannel {
 
 enum NotificationType {
   ORDER_CONFIRMED
+  PAYMENT_RECEIVED
   READY_FOR_PICKUP
   SHIPPED
   INVOICE_ISSUED
+  LOW_STOCK
 }
 
 enum StocktakeStatus {
@@ -84,6 +86,19 @@ enum StocktakeStatus {
   IN_PROGRESS
   PENDING_REVIEW
   COMPLETED
+}
+
+enum ProductDraftStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ProductRequestStatus {
+  PENDING
+  IN_ENRICHMENT
+  ADDED
+  REJECTED
 }
 
 // ─── Models ──────────────────────────────────────────────────────────────────
@@ -119,6 +134,8 @@ model Profile {
   stocktakeScans      StocktakeItem[]
   auditLogs           AuditLog[]
   notifications       Notification[]
+  draftReviews        ProductDraft[]    @relation("DraftReviewer")
+  productRequests     ProductRequest[]
 }
 
 model Store {
@@ -378,4 +395,43 @@ model Notification {
 
   profile Profile @relation(fields: [profileId], references: [id])
   sale    Sale?   @relation(fields: [saleId], references: [id])
+}
+
+/// A candidate product record produced by the enrichment pipeline.
+/// Always requires admin approval (architecture rule #6) before it
+/// becomes a live Product.
+model ProductDraft {
+  id             String             @id @default(cuid())
+  scannedCode    String             // the raw code that triggered lookup
+  suggestedSku   String?
+  suggestedName  String?
+  suggestedBrand String?
+  suggestedDesc  String?
+  suggestedImage String?            // URL or base64
+  enrichmentData Json               // raw API responses keyed by source name
+  sources        Json               // [{ source, field, value }]
+  status         ProductDraftStatus @default(PENDING)
+  notes          String?            // admin review notes
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime           @default(now())
+
+  reviewedBy Profile?         @relation("DraftReviewer", fields: [reviewedById], references: [id])
+  requests   ProductRequest[]
+}
+
+/// A customer or staff request for a product that was not found in the catalogue.
+model ProductRequest {
+  id            String               @id @default(cuid())
+  scannedCode   String
+  draftId       String?              // linked once enrichment has run
+  requestedById String?              // null for anonymous/guest requests
+  email         String?              // contact email for notification
+  notes         String?
+  status        ProductRequestStatus @default(PENDING)
+  createdAt     DateTime             @default(now())
+  notifiedAt    DateTime?            // when the customer was told it was added
+
+  draft       ProductDraft? @relation(fields: [draftId], references: [id])
+  requestedBy Profile?      @relation(fields: [requestedById], references: [id])
 }

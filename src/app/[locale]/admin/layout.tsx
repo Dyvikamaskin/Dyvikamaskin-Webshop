@@ -7,12 +7,21 @@ interface AdminLayoutProps {
 }
 
 const NAV_LINKS = [
-  { href: "/admin",            label: "📊 Oversikt" },
-  { href: "/admin/ordrer",     label: "📦 Ordrer" },
-  { href: "/admin/kunder",     label: "👥 Kunder" },
-  { href: "/admin/kampanjer",  label: "🏷️ Kampanjer" },
-  { href: "/admin/lager",      label: "🗂️ Lager" },
-  { href: "/admin/stocktake",  label: "🔢 Varetelling" },
+  { href: "/admin",                label: "📊 Oversikt" },
+  { href: "/admin/ordrer",         label: "📦 Ordrer" },
+  { href: "/admin/batch",          label: "🚀 Batchutsending" },
+  { href: "/admin/kunder",         label: "👥 Kunder" },
+  { href: "/admin/kampanjer",      label: "🏷️ Kampanjer" },
+  { href: "/admin/lager",          label: "🗂️ Lager" },
+  { href: "/admin/stocktake",      label: "🔢 Varetelling" },
+  { href: "/admin/produktforslag", label: "🔍 Produktforslag" },
+  { href: "/admin/butikk",         label: "🏪 Butikkinnstillinger" },
+  // ── Rapporter & eksport ────────────────────────────────────────────────────
+  { href: "/admin/regnskap",       label: "📊 Regnskapseksport" },
+  { href: "/admin/mva-rapport",    label: "🧾 MVA-rapport" },
+  { href: "/admin/revisjonslogg",  label: "🔍 Revisjonslogg" },
+  // ── Integrasjoner ──────────────────────────────────────────────────────────
+  { href: "/admin/vipps",          label: "💳 Vipps-integrasjon" },
 ];
 
 export default async function AdminLayout({ children }: AdminLayoutProps) {

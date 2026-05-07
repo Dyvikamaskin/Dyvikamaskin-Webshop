@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { buildLocationCode } from "@/lib/location-code";
+import { notifyShipped, notifyReadyForPickup } from "@/lib/notification-service";
 import {
   UserRole,
   OrderStatus,
@@ -47,8 +48,13 @@ export async function updateFulfillmentStatusAction(
     { fulfillmentStatus }
   );
 
+  // Fire notifications (non-blocking)
+  if (fulfillmentStatus === FulfillmentStatus.SHIPPED)           void notifyShipped(saleId);
+  if (fulfillmentStatus === FulfillmentStatus.READY_FOR_PICKUP)  void notifyReadyForPickup(saleId);
+
   revalidatePath("/admin/ordrer");
   revalidatePath(`/admin/ordrer/${saleId}`);
+  revalidatePath("/admin/batch");
   return { ok: true };
 }
 

@@ -230,3 +230,102 @@ export function verifyWebhookAuthorization(authHeader: string | null): boolean {
     : authHeader;
   return incoming === secret;
 }
+
+// ─── Webhook management ───────────────────────────────────────────────────────
+
+/** All ePayment events we want to receive. */
+export const VIPPS_WEBHOOK_EVENTS = [
+  "epayments.payment.created.v1",
+  "epayments.payment.authorized.v1",
+  "epayments.payment.captured.v1",
+  "epayments.payment.cancelled.v1",
+  "epayments.payment.refunded.v1",
+  "epayments.payment.aborted.v1",
+  "epayments.payment.expired.v1",
+  "epayments.payment.terminated.v1",
+] as const;
+
+export interface VippsWebhookRegistration {
+  id:     string;
+  url:    string;
+  events: string[];
+  /** Secret returned on creation — store this as VIPPS_WEBHOOK_SECRET */
+  secret?: string;
+}
+
+/**
+ * Register a new webhook endpoint with Vipps.
+ * Returns the registration including the generated `secret` — store it as
+ * VIPPS_WEBHOOK_SECRET in your environment variables.
+ */
+export async function registerVippsWebhook(
+  webhookUrl: string
+): Promise<VippsWebhookRegistration> {
+  const headers = await authHeaders();
+
+  const res = await fetch(`${vippsBase()}/webhooks/v1/webhooks`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      url:    webhookUrl,
+      events: VIPPS_WEBHOOK_EVENTS,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Vipps registerWebhook ${res.status}: ${text}`);
+  }
+
+  return res.json() as Promise<VippsWebhookRegistration>;
+}
+
+/**
+ * List all webhooks registered for this merchant.
+ */
+export async function listVippsWebhooks(): Promise<VippsWebhookRegistration[]> {
+  const headers = await authHeaders();
+
+  const res = await fetch(`${vippsBase()}/webhooks/v1/webhooks`, {
+    method: "GET",
+    headers,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Vipps listWebhooks ${res.status}: ${text}`);
+  }
+
+  const data = await res.json() as { webhooks?: VippsWebhookRegistration[] };
+  return data.webhooks ?? [];
+}
+
+/**
+ * Delete a registered webhook by ID.
+ */
+export async function deleteVippsWebhook(id: string): Promise<void> {
+  const headers = await authHeaders();
+
+  const res = await fetch(
+    `${vippsBase()}/webhooks/v1/webhooks/${encodeURIComponent(id)}`,
+    { method: "DELETE", headers }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Vipps deleteWebhook ${res.status}: ${text}`);
+  }
+}
+
+/**
+ * Quick connectivity check — tries to fetch the access token.
+ * Returns true if credentials are valid, false otherwise.
+ */
+export async function testVippsConnection(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await getAccessToken();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}

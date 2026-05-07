@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createPhoneOrderAction } from "@/app/actions/phone-order";
 import type { PhoneOrderItem } from "@/app/actions/phone-order";
+import { useBarcodeScannerInput } from "@/lib/use-barcode-scanner";
 
 export default function NyOrdre() {
   const router = useRouter();
@@ -16,8 +17,48 @@ export default function NyOrdre() {
   const [items, setItems] = useState<Array<{ sku: string; quantity: number }>>([
     { sku: "", quantity: 1 },
   ]);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [error,      setError]      = useState<string | null>(null);
+  const [success,    setSuccess]    = useState<string | null>(null);
+  const [scanFeedback, setScanFeedback] = useState<string | null>(null);
+
+  // ── HID scanner: scanned code → look up SKU and add to items ──────────────
+  useBarcodeScannerInput({
+    onScan: async (code) => {
+      setScanFeedback(`Søker etter «${code}»…`);
+      try {
+        const res  = await fetch(`/api/products/lookup?code=${encodeURIComponent(code)}`);
+        const data = await res.json();
+        if (data.found) {
+          const sku = data.product.sku as string;
+          setItems((prev) => {
+            // If SKU already in list, bump quantity
+            const idx = prev.findIndex((i) => i.sku === sku);
+            if (idx !== -1) {
+              setScanFeedback(`✓ Økt antall for ${data.product.name}`);
+              return prev.map((item, i) =>
+                i === idx ? { ...item, quantity: item.quantity + 1 } : item
+              );
+            }
+            setScanFeedback(`✓ Lagt til: ${data.product.name}`);
+            // Replace a blank row if one exists, otherwise append
+            const blankIdx = prev.findIndex((i) => !i.sku.trim());
+            if (blankIdx !== -1) {
+              return prev.map((item, i) =>
+                i === blankIdx ? { sku, quantity: 1 } : item
+              );
+            }
+            return [...prev, { sku, quantity: 1 }];
+          });
+        } else {
+          setScanFeedback(`⚠ Kode «${code}» ikke funnet i katalogen.`);
+        }
+      } catch {
+        setScanFeedback(`⚠ Feil ved oppslag av kode «${code}».`);
+      }
+      setTimeout(() => setScanFeedback(null), 4000);
+    },
+    enabled: true,
+  });
 
   function addItem() {
     setItems((prev) => [...prev, { sku: "", quantity: 1 }]);
@@ -130,7 +171,23 @@ export default function NyOrdre() {
 
         {/* Items */}
         <section style={sectionStyle}>
-          <h2 style={sectionHeading}>Varelinjer</h2>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "1rem" }}>
+            <h2 style={{ ...sectionHeading, margin: 0 }}>Varelinjer</h2>
+            <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+              📷 Bruk strekkodeskanner for å legge til varer direkte
+            </span>
+          </div>
+
+          {scanFeedback && (
+            <div style={{
+              padding: "0.5rem 0.75rem", marginBottom: "0.75rem", borderRadius: "6px", fontSize: "0.8rem",
+              background: scanFeedback.startsWith("✓") ? "#f0fdf4" : scanFeedback.startsWith("⚠") ? "#fef9c3" : "#e0f2fe",
+              color:      scanFeedback.startsWith("✓") ? "#166534" : scanFeedback.startsWith("⚠") ? "#713f12" : "#0369a1",
+              border:     "1px solid " + (scanFeedback.startsWith("✓") ? "#bbf7d0" : scanFeedback.startsWith("⚠") ? "#fde047" : "#bae6fd"),
+            }}>
+              {scanFeedback}
+            </div>
+          )}
 
           {items.map((item, index) => (
             <div
