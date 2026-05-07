@@ -17,6 +17,7 @@
     "@react-email/components": "^1.0.12",
     "@react-pdf/renderer": "^4.5.1",
     "@sentry/nextjs": "^10.51.0",
+    "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.3",
     "@types/pg": "^8.20.0",
     "@upstash/ratelimit": "^2.0.8",
