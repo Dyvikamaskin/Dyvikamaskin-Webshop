@@ -2,6 +2,7 @@ import { listProducts } from "@/lib/products";
 import { getCategoryTree } from "@/lib/categories";
 import { ProductCard } from "@/components/product/ProductCard";
 import { CategoryNav } from "@/components/category/CategoryNav";
+import { InfoCardsRow } from "@/components/layout/InfoCardsRow";
 import { cookies } from "next/headers";
 import type { CustomerTypeValue } from "@/lib/stores/use-customer-type";
 
@@ -21,8 +22,10 @@ export default async function HomePage() {
     rawType === "BUSINESS" ? "BUSINESS" : "CONSUMER";
 
   return (
-    <main style={{ padding: "1.5rem", fontFamily: "sans-serif", maxWidth: "1200px", margin: "0 auto" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: "2rem" }}>
+    <>
+      <InfoCardsRow />
+      <main style={{ padding: "1.5rem", fontFamily: "sans-serif", maxWidth: "1200px", margin: "0 auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: "2rem" }}>
         {/* Sidebar */}
         <aside>
           <CategoryNav categories={categories} />
@@ -50,7 +53,8 @@ export default async function HomePage() {
             </div>
           )}
         </section>
-      </div>
-    </main>
+        </div>
+      </main>
+    </>
   );
 }

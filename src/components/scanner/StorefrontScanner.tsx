@@ -17,6 +17,7 @@
 
 import { useState, useEffect, useRef, useTransition } from "react";
 import { useBarcodeScannerInput } from "@/lib/use-barcode-scanner";
+import { useScannerStore } from "@/lib/stores/use-scanner";
 import { submitProductRequestAction } from "@/app/actions/product-draft";
 
 interface ProductHit {
@@ -36,7 +37,8 @@ type State =
   | { phase: "requested" };
 
 export default function StorefrontScanner() {
-  const [open,      setOpen]      = useState(false);
+  const open       = useScannerStore((s) => s.isOpen);
+  const closeModal = useScannerStore((s) => s.close);
   const [state,     setState]     = useState<State>({ phase: "idle" });
   const [cameraOn,  setCameraOn]  = useState(false);
   const [email,     setEmail]     = useState("");
@@ -128,24 +130,10 @@ export default function StorefrontScanner() {
     setEmail(""); setNotes(""); setReqError(null);
   }
 
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        title="Scan en strekkode eller QR-kode"
-        aria-label="Åpne skanner"
-        style={{
-          position: "fixed", bottom: "1.5rem", right: "1.5rem", zIndex: 1000,
-          width: "3.25rem", height: "3.25rem", borderRadius: "50%",
-          background: "#0f172a", color: "#fff", border: "none",
-          fontSize: "1.4rem", cursor: "pointer", boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}
-      >
-        📷
-      </button>
-    );
-  }
+  // The floating "open" button is gone in Phase 0.5 — the scanner trigger
+  // now lives in the new TopBar's scanner icon. We render only the modal
+  // when the store says open.
+  if (!open) return null;
 
   return (
     <div style={{
@@ -157,7 +145,7 @@ export default function StorefrontScanner() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "0.875rem 1rem", borderBottom: "1px solid #f1f5f9", background: "#0f172a", borderRadius: "12px 12px 0 0" }}>
         <span style={{ color: "#f1f5f9", fontWeight: 700, fontSize: "0.9rem" }}>📷 Skann produkt</span>
-        <button onClick={() => { setOpen(false); setCameraOn(false); reset(); }}
+        <button onClick={() => { closeModal(); setCameraOn(false); reset(); }}
           style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "1.1rem" }}>✕</button>
       </div>
 
