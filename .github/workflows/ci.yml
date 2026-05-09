@@ -51,11 +51,14 @@ jobs:
     timeout-minutes: 25
     needs: typecheck-and-unit
 
-    # Only run E2E when secrets are available. The link smoke test needs to
-    # boot the app, which requires DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL,
-    # and NEXT_PUBLIC_SUPABASE_ANON_KEY at minimum. Forks won't have those
-    # — skip cleanly rather than failing.
-    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+    # Opt-in. The link smoke test needs to boot the Next.js app, which
+    # requires a real DATABASE_URL plus Supabase credentials. Until the
+    # staging branch is wired up (see docs/staging-and-ci-setup.md),
+    # leave this off. To turn it on:
+    #   1. Configure GitHub repo secrets per docs/staging-and-ci-setup.md
+    #   2. Repository → Settings → Secrets and variables → Actions →
+    #      Variables tab → set E2E_ENABLED=true
+    if: ${{ vars.E2E_ENABLED == 'true' }}
 
     steps:
       - uses: actions/checkout@v5

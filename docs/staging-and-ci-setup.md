@@ -25,10 +25,15 @@ repository secret. Add the following five secrets so the
 | `SUPABASE_URL_STAGING` | `https://<staging-ref>.supabase.co` | Supabase staging branch → Project Settings → API |
 | `SUPABASE_ANON_KEY_STAGING` | `sb_publishable_…` | Supabase staging branch → Project Settings → API |
 
-If these are missing, the `e2e-link-integrity` job is skipped (the
-condition in `ci.yml` checks `secrets.DATABASE_URL_STAGING` indirectly via
-the build step). The `typecheck-and-unit` job runs unconditionally and is
-sufficient as a merge gate until staging is up.
+After adding the four secrets, **also add the repository variable**:
+
+- Settings → Secrets and variables → Actions → **Variables** tab → New
+  repository variable → name `E2E_ENABLED`, value `true`.
+
+The `e2e-link-integrity` job in `.github/workflows/ci.yml` is gated on
+`vars.E2E_ENABLED == 'true'`. Until you flip that variable on, only
+`typecheck-and-unit` runs (typecheck + vitest + link audit), and it is
+sufficient as a merge gate.
 
 ## 2. Supabase branching
 
