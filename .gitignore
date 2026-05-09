@@ -39,6 +39,12 @@ yarn-error.log*
 
 # local scratch / unpacked docx
 docs/handoff-temp/
+docs/spec-unpacked/
+
+# Office temporary lock files
+~$*.docx
+~$*.xlsx
+~$*.pptx
 
 # typescript
 *.tsbuildinfo
