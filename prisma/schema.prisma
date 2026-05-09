@@ -118,6 +118,12 @@ enum ProductRequestStatus {
   REJECTED
 }
 
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model Profile {
@@ -531,4 +537,25 @@ model ProductEnrichmentProposal {
   createdAt      DateTime @default(now())
 
   product Product @relation(fields: [productSku], references: [sku], onDelete: Cascade)
+}
+
+
+// ─── WebhookEvent (Phase 1 — idempotency for inbound webhooks) ──────────────
+
+model WebhookEvent {
+  id           String        @id @default(cuid())
+  /// Provider identifier — "vipps", "mybring", etc.
+  provider     String
+  /// Provider's unique event identifier. For Vipps this is the
+  /// idempotencyKey delivered with each webhook event.
+  eventId      String
+  receivedAt   DateTime      @default(now())
+  processedAt  DateTime?
+  status       WebhookStatus @default(RECEIVED)
+  payload      Json
+  errorMessage String?
+
+  @@unique([provider, eventId])
+  @@index([receivedAt])
+  @@index([provider, status])
 }

@@ -51,3 +51,9 @@ docs/spec-unpacked/
 next-env.d.ts
 
 /src/app/generated/prisma
+
+# test artifacts
+/coverage
+/playwright-report
+/test-results
+/.playwright

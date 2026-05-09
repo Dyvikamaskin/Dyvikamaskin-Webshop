@@ -9,6 +9,11 @@ import {
 import { generateInvoiceForSale } from "@/lib/invoice-service";
 import { notifyOrderConfirmed, checkAndNotifyLowStock } from "@/lib/notification-service";
 import { OrderStatus } from "@/app/generated/prisma/enums";
+import {
+  recordInboundWebhook,
+  markWebhookProcessed,
+  markWebhookFailed,
+} from "@/lib/webhook-idempotency";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -218,7 +223,30 @@ export async function POST(request: NextRequest) {
 
   console.info("[vipps-webhook] event received", event.name, event.reference);
 
-  // 3. Handle event
+  // 3. Idempotency — skip if Vipps redelivered the same eventId.
+  // Each Vipps webhook carries an idempotencyKey; we fall back to the
+  // pspReference + name + reference triple when the key is absent so we
+  // never silently re-process events.
+  const idempotencyId =
+    event.idempotencyKey ??
+    `${event.reference}:${event.name}:${event.pspReference ?? "no-psp"}`;
+
+  const record = await recordInboundWebhook("vipps", idempotencyId, event);
+  if (record.status === "duplicate") {
+    console.info("[vipps-webhook] duplicate delivery, skipping", idempotencyId);
+    return NextResponse.json({ ok: true, deduplicated: true });
+  }
+  if (record.status === "in_flight") {
+    console.warn(
+      "[vipps-webhook] retry of an event that did not finish, retrying handler",
+      idempotencyId
+    );
+    // Fall through and re-run the handler — the side effects are designed
+    // to be idempotent (existing AuditLog check inside handleAuthorized
+    // is the in-handler safety net during the Phase 1 transition).
+  }
+
+  // 4. Handle event
   try {
     switch (event.name) {
       case "AUTHORIZED":
@@ -269,9 +297,13 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     console.error("[vipps-webhook] unhandled error", err);
-    // Return 200 anyway — Vipps will retry on non-2xx, causing double processing
+    await markWebhookFailed(record.id, err);
+    // Return 200 anyway — Vipps will retry on non-2xx, causing double
+    // processing. The WebhookEvent row stays FAILED so the next delivery
+    // (if any) re-runs the handler from a clean state.
     return NextResponse.json({ ok: false, error: "Internal error" });
   }
 
+  await markWebhookProcessed(record.id);
   return NextResponse.json({ ok: true });
 }
