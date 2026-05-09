@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { logoutAction } from "@/app/actions/auth";
 
 /**
  * StoreHeader — server component.
@@ -126,19 +127,24 @@ export default async function StoreHeader() {
                 Min konto
               </a>
 
-              <a
-                href="/api/auth/logout"
-                style={{
-                  padding: "0.35rem 0.75rem",
-                  borderRadius: "5px",
-                  color: "#64748b",
-                  fontWeight: 500,
-                  textDecoration: "none",
-                  fontSize: "0.825rem",
-                }}
-              >
-                Logg ut
-              </a>
+              <form action={logoutAction} style={{ display: "inline" }}>
+                <button
+                  type="submit"
+                  style={{
+                    padding: "0.35rem 0.75rem",
+                    borderRadius: "5px",
+                    color: "#64748b",
+                    fontWeight: 500,
+                    fontSize: "0.825rem",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  Logg ut
+                </button>
+              </form>
             </>
           ) : (
             <>
