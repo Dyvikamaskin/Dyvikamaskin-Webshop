@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createProductAction } from "@/app/actions/product";
+import { createProductAction, uploadProductImageAction } from "@/app/actions/product";
 import { CategoryPicker } from "@/components/admin/CategoryPicker";
 import {
   ProductCondition,
@@ -72,6 +72,12 @@ export default function NyttProduktForm({ categories }: Props) {
   const [replaceInput,        setReplaceInput]        = useState("");
   const [condition,           setCondition]           = useState<ProductCondition>(ProductCondition.NEW);
   const [provenance,          setProvenance]          = useState<PartProvenance>(PartProvenance.AFTERMARKET);
+  // ── Admin-only metadata (NEVER visible on storefront) ─────────────────
+  const [tags,                setTags]                = useState<string[]>([]);
+  const [tagInput,            setTagInput]            = useState("");
+  const [mainImageUrl,        setMainImageUrl]        = useState("");
+  const [uploadingImage,      setUploadingImage]      = useState(false);
+  const [imageError,          setImageError]          = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -98,6 +104,13 @@ export default function NyttProduktForm({ categories }: Props) {
         : null,
       conditionNotes: (fd.get("conditionNotes") as string) || undefined,
       provenance,
+      // ── Admin-only metadata ──
+      purchasePrice: fd.get("purchasePrice")
+        ? parseFloat(fd.get("purchasePrice") as string)
+        : undefined,
+      tags,
+      hiddenDescription: (fd.get("hiddenDescription") as string) || undefined,
+      mainImage: mainImageUrl.trim() || undefined,
     });
 
     setPending(false);
@@ -121,6 +134,34 @@ export default function NyttProduktForm({ categories }: Props) {
 
   function removeReplaceTag(tag: string) {
     setReplacesPartNumbers((prev) => prev.filter((t) => t !== tag));
+  }
+
+  function addTag() {
+    const val = tagInput.trim();
+    if (!val) return;
+    if (!tags.includes(val)) setTags((prev) => [...prev, val]);
+    setTagInput("");
+  }
+
+  function removeTag(tag: string) {
+    setTags((prev) => prev.filter((t) => t !== tag));
+  }
+
+  async function handleImageUpload(file: File) {
+    setUploadingImage(true);
+    setImageError(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    // SKU may not be set yet — server action falls back to "noSku" prefix.
+    const skuInput = document.getElementById("sku") as HTMLInputElement | null;
+    if (skuInput?.value) fd.append("sku", skuInput.value);
+    const result = await uploadProductImageAction(fd);
+    setUploadingImage(false);
+    if (!result.ok) {
+      setImageError(result.error);
+      return;
+    }
+    setMainImageUrl(result.url);
   }
 
   return (
@@ -416,6 +457,204 @@ export default function NyttProduktForm({ categories }: Props) {
             ))}
           </div>
         </div>
+
+        {/* ─── Admin-only metadata (skjult fra butikken) ────────────────── */}
+        <fieldset
+          style={{
+            margin: "0.5rem 0",
+            padding: "1rem 1.25rem",
+            background: "#f8fafc",
+            border: "1px dashed #cbd5e1",
+            borderRadius: "8px",
+          }}
+        >
+          <legend
+            style={{
+              padding: "0 0.5rem",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+              color: "#475569",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}
+          >
+            Intern data — skjult fra butikken
+          </legend>
+
+          {/* Hovedbilde — URL eller opplasting */}
+          <div style={{ marginTop: "0.5rem" }}>
+            <label htmlFor="mainImage" style={labelStyle}>Hovedbilde</label>
+            <input
+              id="mainImage"
+              type="text"
+              value={mainImageUrl}
+              onChange={(e) => setMainImageUrl(e.target.value)}
+              placeholder="https://leverandor.no/.../bilde.jpg"
+              style={inputStyle}
+            />
+            <div style={{ marginTop: "0.4rem", display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "0.4rem 0.8rem",
+                  background: uploadingImage ? "#e2e8f0" : "#fff",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "6px",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  cursor: uploadingImage ? "default" : "pointer",
+                  color: "#0f172a",
+                }}
+              >
+                {uploadingImage ? "Laster opp …" : "Eller last opp fil"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  disabled={uploadingImage}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void handleImageUpload(f);
+                  }}
+                  style={{ display: "none" }}
+                />
+              </label>
+              {mainImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={mainImageUrl}
+                  alt=""
+                  style={{
+                    width: 48,
+                    height: 48,
+                    objectFit: "cover",
+                    borderRadius: 4,
+                    border: "1px solid #e2e8f0",
+                  }}
+                />
+              ) : null}
+            </div>
+            {imageError ? (
+              <p style={{ marginTop: "0.4rem", color: "#dc2626", fontSize: "0.8rem" }}>
+                {imageError}
+              </p>
+            ) : null}
+            <p style={hintStyle}>
+              Lim inn URL fra leverandørens bildebank, eller last opp en fil
+              (JPEG / PNG / WebP / GIF, maks 10 MB).
+            </p>
+          </div>
+
+          {/* Innkjøpspris */}
+          <div style={{ marginTop: "1rem" }}>
+            <label htmlFor="purchasePrice" style={labelStyle}>Innkjøpspris ekskl. MVA (kr)</label>
+            <input
+              id="purchasePrice"
+              name="purchasePrice"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              style={{ ...inputStyle, maxWidth: "200px" }}
+            />
+            <p style={hintStyle}>
+              Din inn-pris hos leverandør. Brukes til margin-rapport. Aldri
+              synlig for kunder.
+            </p>
+          </div>
+
+          {/* Interne tagger */}
+          <div style={{ marginTop: "1rem" }}>
+            <label style={labelStyle}>Interne tagger</label>
+            {tags.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginBottom: "0.4rem" }}>
+                {tags.map((t) => (
+                  <span
+                    key={t}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      padding: "0.2rem 0.55rem",
+                      background: "#e0e7ff",
+                      border: "1px solid #c7d2fe",
+                      borderRadius: "4px",
+                      fontSize: "0.8rem",
+                      color: "#1e1b4b",
+                    }}
+                  >
+                    {t}
+                    <button
+                      type="button"
+                      onClick={() => removeTag(t)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        lineHeight: 1,
+                        color: "#475569",
+                        fontSize: "0.9rem",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); addTag(); }
+                }}
+                placeholder="f.eks. sesong-2025, kampanje-Q3"
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={addTag}
+                style={{
+                  padding: "0.55rem 0.9rem",
+                  background: "#f1f5f9",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "6px",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  color: "#0f172a",
+                }}
+              >
+                + Legg til
+              </button>
+            </div>
+            <p style={hintStyle}>
+              Fri-form kategorisering for intern søk. Vises aldri i butikken.
+            </p>
+          </div>
+
+          {/* Skjult beskrivelse */}
+          <div style={{ marginTop: "1rem" }}>
+            <label htmlFor="hiddenDescription" style={labelStyle}>
+              Skjult beskrivelse / interne notater
+            </label>
+            <textarea
+              id="hiddenDescription"
+              name="hiddenDescription"
+              rows={3}
+              placeholder="F.eks. leverandørs eiendomheter, plukk-instruksjoner, garanti-detaljer"
+              style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }}
+            />
+            <p style={hintStyle}>
+              Synlig kun for admin. Ikke samme som offentlig &quot;Kort
+              beskrivelse&quot; over.
+            </p>
+          </div>
+        </fieldset>
 
         {/* Aktiv */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>

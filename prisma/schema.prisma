@@ -269,6 +269,16 @@ model Product {
   conditionRating ConditionRating?    // required at app layer when condition = USED
   conditionNotes  String?
   provenance      PartProvenance   @default(AFTERMARKET)
+  // ─── Admin-only metadata (NEVER exposed via storefront PRODUCT_SELECT) ───
+  // purchasePrice:     cost-of-goods-sold. Used for margin reports and
+  //                    profitability dashboards. Storefront never sees it.
+  // tags:              free-form internal categorisation. Searchable by
+  //                    admins; never rendered on the public PDP.
+  // hiddenDescription: internal notes about the product (supplier quirks,
+  //                    warranty caveats, picking instructions). Admin only.
+  purchasePrice     Decimal?
+  tags              String[]
+  hiddenDescription String?
   // ─── Phase 5 search columns ──────────────────────────────────────────────
   // Maintained by DB trigger; do not write from app code.
   //   searchKey:    lowercase, dashes/spaces stripped from sku+partNumber+

@@ -3,11 +3,16 @@
 import { prisma } from "@/lib/prisma";
 import { enqueueEnrichment } from "@/lib/queue/enrichment";
 import { findOrCreateCategoryByPath } from "@/app/actions/category";
+import { requireRole } from "@/lib/auth";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   ProductCondition,
   ConditionRating,
   PartProvenance,
+  UserRole,
 } from "@/app/generated/prisma/enums";
+
+const PRODUCT_IMAGES_BUCKET = "product-images";
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +47,16 @@ export interface CreateProductInput {
   conditionNotes?:      string;
   /** Defaults to AFTERMARKET on manual creation. */
   provenance?:          PartProvenance;
+  // ── Admin-only metadata (NEVER returned by storefront queries) ──
+  /** Cost-of-goods-sold. Used for margin reports. */
+  purchasePrice?:       number;
+  /** Free-form internal tags. Searchable in admin. */
+  tags?:                string[];
+  /** Internal notes about the product (supplier quirks, picking instructions). */
+  hiddenDescription?:   string;
+  /** Image URL — either a typed external link or a Supabase Storage URL
+   *  returned by uploadProductImageAction. */
+  mainImage?:           string;
 }
 
 export interface CreateProductResult {
@@ -99,6 +114,10 @@ export async function createProductAction(
       }
     }
 
+    const cleanedTags = data.tags
+      ? [...new Set(data.tags.map((t) => t.trim()).filter(Boolean))]
+      : [];
+
     await prisma.product.create({
       data: {
         sku:                  data.sku.trim(),
@@ -117,6 +136,13 @@ export async function createProductAction(
           : null,
         conditionNotes: data.conditionNotes?.trim() || null,
         provenance: data.provenance ?? PartProvenance.AFTERMARKET,
+        // Admin-only metadata
+        purchasePrice:     data.purchasePrice != null && !isNaN(Number(data.purchasePrice))
+          ? Number(data.purchasePrice)
+          : null,
+        tags:              cleanedTags,
+        hiddenDescription: data.hiddenDescription?.trim() || null,
+        mainImage:         data.mainImage?.trim()         || null,
       },
     });
 
@@ -175,6 +201,11 @@ export async function updateProductBasicAction(
     minimumOrderQuantity?: number;
     leadTimeDays?: number;
     weight?: number | null;
+    // Admin-only metadata
+    purchasePrice?: number | null;
+    tags?: string[];
+    hiddenDescription?: string | null;
+    mainImage?: string | null;
   }
 ): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -184,4 +215,95 @@ export async function updateProductBasicAction(
     const error = err instanceof Error ? err.message : "Ukjent feil";
     return { ok: false, error };
   }
+}
+
+// ─── Image upload ─────────────────────────────────────────────────────────────
+
+const ALLOWED_IMAGE_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+export type UploadImageResult =
+  | { ok: true; url: string }
+  | { ok: false; error: string };
+
+/**
+ * Upload a product image to Supabase Storage and return the public URL.
+ *
+ * Auth: STORE_MANAGER+ only — same gate as product creation/edit.
+ * Validates MIME + size up front so we don't waste an upload roundtrip
+ * on hopelessly oversized files.
+ *
+ * The bucket is created on first use (idempotent createBucket; we
+ * swallow the "already exists" error). Public read so the storefront
+ * can render the image without a signed URL; writes are admin-only at
+ * the app layer (this server action's role gate).
+ */
+export async function uploadProductImageAction(
+  formData: FormData,
+): Promise<UploadImageResult> {
+  try {
+    await requireRole(UserRole.STORE_MANAGER);
+  } catch {
+    return { ok: false, error: "Bare admin-brukere kan laste opp produktbilder." };
+  }
+
+  const file = formData.get("file");
+  const sku = String(formData.get("sku") ?? "").trim();
+
+  if (!(file instanceof File)) {
+    return { ok: false, error: "Ingen fil sendt." };
+  }
+  if (!ALLOWED_IMAGE_MIME.has(file.type)) {
+    return {
+      ok: false,
+      error: `Filformat ikke støttet (${file.type}). Bruk JPEG, PNG, WebP eller GIF.`,
+    };
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    return {
+      ok: false,
+      error: `Filen er for stor (${Math.round(file.size / 1024 / 1024)} MB). Maks ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`,
+    };
+  }
+
+  const supabase = getSupabaseAdmin();
+
+  // First-call bucket creation. Idempotent — ignore the conflict.
+  try {
+    await supabase.storage.createBucket(PRODUCT_IMAGES_BUCKET, {
+      public: true,
+      fileSizeLimit: MAX_IMAGE_BYTES,
+    });
+  } catch {
+    // Bucket likely already exists.
+  }
+
+  const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+  const safeSku = (sku || "noSku").replace(/[^a-z0-9-]/gi, "");
+  const filename =
+    `${safeSku}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const { error: uploadErr } = await supabase.storage
+    .from(PRODUCT_IMAGES_BUCKET)
+    .upload(filename, bytes, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+  if (uploadErr) {
+    console.error("[uploadProductImage] storage upload failed", uploadErr);
+    return { ok: false, error: `Kunne ikke laste opp bildet: ${uploadErr.message}` };
+  }
+
+  const { data } = supabase.storage
+    .from(PRODUCT_IMAGES_BUCKET)
+    .getPublicUrl(filename);
+
+  return { ok: true, url: data.publicUrl };
 }
