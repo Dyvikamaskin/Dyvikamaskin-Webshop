@@ -4,6 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { enrichProductDirectly } from "@/lib/product-enrichment";
 import { runFitmentEnrichmentForProduct } from "@/lib/fitment-enrichment";
 import { findOrCreateCategoryByPath } from "@/app/actions/category";
+import {
+  ProductCondition,
+  ConditionRating,
+  PartProvenance,
+} from "@/app/generated/prisma/enums";
 import { revalidatePath } from "next/cache";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -28,6 +33,17 @@ export interface CsvProductRow {
    */
   categorySlug?:     string;
   mvaRate?:          number;
+  // ── Phase 0.7 — Condition & provenance ──────────────────────────
+  /** "NEW" or "USED" (case-insensitive). Default NEW. */
+  condition?:        string;
+  /** "AS_NEW" | "EXCELLENT" | "GOOD" | "FAIR" | "POOR" — required when USED. */
+  conditionRating?:  string;
+  conditionNotes?:   string;
+  /**
+   * "GENUINE" | "OEM" | "AFTERMARKET" — REQUIRED on every imported row.
+   * Imports are pre-classified so we never default this for safety.
+   */
+  provenance?:       string;
 }
 
 export interface ImportResult {
@@ -97,6 +113,48 @@ export async function importProductsAction(
         continue;
       }
 
+      // Provenance is REQUIRED on every imported row. Imports are
+      // pre-classified so we never default to a value that may be
+      // wrong (Forbrukerkjøpsloven / Markedsføringsloven concerns).
+      const provenanceRaw = row.provenance?.trim().toUpperCase();
+      if (!provenanceRaw) {
+        errors.push(`${sku}: provenance er påkrevd (GENUINE | OEM | AFTERMARKET)`);
+        skipped++;
+        continue;
+      }
+      if (!isPartProvenance(provenanceRaw)) {
+        errors.push(`${sku}: ukjent provenance "${row.provenance}" — bruk GENUINE, OEM eller AFTERMARKET`);
+        skipped++;
+        continue;
+      }
+      const provenance = provenanceRaw as PartProvenance;
+
+      // Condition defaults to NEW. Rating required when USED.
+      const conditionRaw = row.condition?.trim().toUpperCase();
+      const condition: ProductCondition =
+        conditionRaw === "USED" ? ProductCondition.USED : ProductCondition.NEW;
+
+      let conditionRating: ConditionRating | null = null;
+      if (condition === ProductCondition.USED) {
+        const ratingRaw = row.conditionRating?.trim().toUpperCase();
+        if (!ratingRaw) {
+          errors.push(`${sku}: conditionRating er påkrevd når condition=USED`);
+          skipped++;
+          continue;
+        }
+        if (!isConditionRating(ratingRaw)) {
+          errors.push(`${sku}: ukjent conditionRating "${row.conditionRating}"`);
+          skipped++;
+          continue;
+        }
+        conditionRating = ratingRaw as ConditionRating;
+      } else if (row.conditionRating?.trim()) {
+        // Rating supplied for NEW — ignore (USED-only field) but warn so
+        // the admin notices their CSV likely has the wrong condition.
+        errors.push(`${sku}: conditionRating ignorert (gjelder kun USED)`);
+      }
+      const conditionNotes = row.conditionNotes?.trim() || null;
+
       // Resolve category: categoryPath (new) wins over categorySlug (legacy).
       let categoryId: string | null = null;
 
@@ -134,6 +192,10 @@ export async function importProductsAction(
           categoryId,
           mvaRate:          row.mvaRate != null ? Number(row.mvaRate) : 0.25,
           isActive:         true,
+          condition,
+          conditionRating,
+          conditionNotes,
+          provenance,
         },
       });
       created++;
@@ -162,4 +224,16 @@ export async function importProductsAction(
     errors,
     newCategories: [...newCategorySet],
   };
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const PROVENANCE_VALUES = new Set<string>(Object.values(PartProvenance));
+function isPartProvenance(value: string): value is PartProvenance {
+  return PROVENANCE_VALUES.has(value);
+}
+
+const RATING_VALUES = new Set<string>(Object.values(ConditionRating));
+function isConditionRating(value: string): value is ConditionRating {
+  return RATING_VALUES.has(value);
 }

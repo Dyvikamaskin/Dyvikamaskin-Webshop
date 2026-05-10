@@ -1,11 +1,133 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { getProductBySku } from "@/lib/products";
 import { getConsumerPrice, getBusinessPrice } from "@/lib/pricing";
 import { formatPrice, formatNumber } from "@/lib/formatters";
 import { AddToCartButton } from "@/components/cart/AddToCartButton";
+import {
+  ProductCondition,
+  ConditionRating,
+  PartProvenance,
+} from "@/app/generated/prisma/enums";
 import type { CustomerTypeValue } from "@/lib/stores/use-customer-type";
 import type { Metadata } from "next";
+
+// ─── Condition + provenance row (Phase 0.7) ───────────────────────────────
+
+const CONDITION_RATING_LABEL: Record<ConditionRating, string> = {
+  AS_NEW: "Som ny",
+  EXCELLENT: "Utmerket",
+  GOOD: "God",
+  FAIR: "Akseptabel",
+  POOR: "Slitt",
+};
+
+const PROVENANCE_LABEL: Record<PartProvenance, string> = {
+  GENUINE: "Originaldeler",
+  OEM: "OEM",
+  AFTERMARKET: "Aftermarket",
+};
+
+function ratingDots(rating: ConditionRating): string {
+  const order: ConditionRating[] = ["POOR", "FAIR", "GOOD", "EXCELLENT", "AS_NEW"];
+  const filled = order.indexOf(rating) + 1;
+  return "●".repeat(filled) + "○".repeat(5 - filled);
+}
+
+function ConditionProvenanceRow({
+  condition,
+  conditionRating,
+  conditionNotes,
+  provenance,
+}: {
+  condition: ProductCondition;
+  conditionRating: ConditionRating | null;
+  conditionNotes: string | null;
+  provenance: PartProvenance;
+}) {
+  const isUsed = condition === ProductCondition.USED;
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.4rem",
+        marginBottom: "0.85rem",
+      }}
+    >
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+        <span
+          style={{
+            padding: "0.2rem 0.65rem",
+            borderRadius: "9999px",
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            background: isUsed ? "#fef3c7" : "#dcfce7",
+            color: isUsed ? "#92400e" : "#166534",
+            border: "1px solid",
+            borderColor: isUsed ? "#fcd34d" : "#86efac",
+          }}
+        >
+          {isUsed ? "Brukt" : "Ny"}
+        </span>
+        {isUsed && conditionRating ? (
+          <span
+            title={CONDITION_RATING_LABEL[conditionRating]}
+            style={{
+              padding: "0.2rem 0.65rem",
+              borderRadius: "9999px",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              background: "#f1f5f9",
+              color: "#0f172a",
+              border: "1px solid #cbd5e1",
+              fontFamily: "monospace",
+              letterSpacing: "0.1em",
+            }}
+          >
+            {ratingDots(conditionRating)}{" "}
+            <span style={{ fontFamily: "inherit", letterSpacing: "normal", marginLeft: "0.25rem" }}>
+              {CONDITION_RATING_LABEL[conditionRating]}
+            </span>
+          </span>
+        ) : null}
+        <Link
+          href="/info/deletyper"
+          title="Hva betyr Originaldeler / OEM / Aftermarket?"
+          style={{
+            padding: "0.2rem 0.65rem",
+            borderRadius: "9999px",
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            background: "#fff",
+            color: "#0f172a",
+            border: "1px solid #cbd5e1",
+            textDecoration: "none",
+          }}
+        >
+          {PROVENANCE_LABEL[provenance]}
+        </Link>
+      </div>
+      {isUsed && conditionNotes ? (
+        <p
+          style={{
+            margin: 0,
+            color: "#475569",
+            fontSize: "0.8125rem",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            borderRadius: "6px",
+            padding: "0.45rem 0.7rem",
+            lineHeight: 1.45,
+          }}
+        >
+          <strong style={{ color: "#0f172a" }}>Tilstandsnotat:</strong> {conditionNotes}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 interface PageProps {
   params: Promise<{ sku: string; locale: string }>;
@@ -73,7 +195,7 @@ export default async function ProductPage({ params }: PageProps) {
           <>
             {" / "}
             <a
-              href={`/produkter?kategori=${product.category.id}`}
+              href={`/kategori/${product.category.slug}`}
               style={{ color: "#1d4ed8", textDecoration: "none" }}
             >
               {product.category.name}
@@ -127,6 +249,14 @@ export default async function ProductPage({ params }: PageProps) {
           <h1 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.5rem" }}>
             {product.name}
           </h1>
+
+          {/* Condition + provenance badges (Phase 0.7) */}
+          <ConditionProvenanceRow
+            condition={product.condition}
+            conditionRating={product.conditionRating}
+            conditionNotes={product.conditionNotes}
+            provenance={product.provenance}
+          />
 
           {product.shortDescription && (
             <p style={{ color: "#555", marginBottom: "1rem", fontSize: "0.9375rem" }}>

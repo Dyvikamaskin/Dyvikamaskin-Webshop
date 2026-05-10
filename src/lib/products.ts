@@ -7,6 +7,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCategoryDescendantIds } from "@/lib/categories";
+import type {
+  ProductCondition,
+  PartProvenance,
+} from "@/app/generated/prisma/enums";
 
 // ─── Select shape (shared across queries) ─────────────────────────────────────
 
@@ -25,6 +29,10 @@ const PRODUCT_SELECT = {
   isActive: true,
   isDiscontinued: true,
   categoryId: true,
+  condition: true,
+  conditionRating: true,
+  conditionNotes: true,
+  provenance: true,
   category: {
     select: { id: true, name: true, slug: true },
   },
@@ -79,6 +87,15 @@ export interface ProductListOptions {
   page?: number;
   /** Items per page (default 24, max 100) */
   limit?: number;
+  // ── Phase 0.7 — visible filters ──────────────────────────────────
+  /** One or more conditions; empty/undefined = no filter. */
+  conditions?: ProductCondition[];
+  /** One or more provenance values; empty/undefined = no filter. */
+  provenances?: PartProvenance[];
+  /** Show only products that fit a specific MachineMake (any model). */
+  makeId?: string;
+  /** Show only products that fit a specific MachineModel. */
+  modelId?: string;
 }
 
 export interface ProductListResult {
@@ -135,7 +152,16 @@ export async function getProductBySku(
 export async function listProducts(
   options: ProductListOptions = {}
 ): Promise<ProductListResult> {
-  const { categoryId, brand, search, page = 1 } = options;
+  const {
+    categoryId,
+    brand,
+    search,
+    page = 1,
+    conditions,
+    provenances,
+    makeId,
+    modelId,
+  } = options;
   const limit = Math.min(options.limit ?? 24, 100);
   const skip = (Math.max(page, 1) - 1) * limit;
 
@@ -159,6 +185,21 @@ export async function listProducts(
       { partNumber: { contains: search, mode: "insensitive" } },
       { brand: { contains: search, mode: "insensitive" } },
     ];
+  }
+
+  // ── Phase 0.7 filters ────────────────────────────────────────────
+  if (conditions && conditions.length > 0) {
+    where.condition = { in: conditions };
+  }
+  if (provenances && provenances.length > 0) {
+    where.provenance = { in: provenances };
+  }
+  if (modelId) {
+    // Restrict to products that have a fitment to this model.
+    where.fitments = { some: { modelId } };
+  } else if (makeId) {
+    // Restrict to products that have a fitment to ANY model under this make.
+    where.fitments = { some: { model: { makeId } } };
   }
 
   const [total, raws] = await Promise.all([

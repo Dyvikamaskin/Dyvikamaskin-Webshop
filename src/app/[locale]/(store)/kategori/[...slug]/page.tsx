@@ -1,14 +1,20 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { resolveCategoryPath } from "@/lib/categories";
-import { listProducts, getActiveBrands } from "@/lib/products";
+import { listProducts } from "@/lib/products";
 import { ProductCard } from "@/components/product/ProductCard";
+import {
+  ProductListingFilters,
+  parseActiveFilters,
+} from "@/components/product/ProductListingFilters";
+import { getSavedMachinesForFilter } from "@/lib/saved-machines";
+import { prisma } from "@/lib/prisma";
 import type { CustomerTypeValue } from "@/lib/stores/use-customer-type";
 import type { Metadata } from "next";
 
 interface PageProps {
   params: Promise<{ slug: string[]; locale: string }>;
-  searchParams: Promise<{ merke?: string; side?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -25,28 +31,43 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 /**
  * Category page — /kategori/[...slug]
- *
- * Sub-categories live in the hamburger drawer (Phase 0.5). The static
- * category sidebar was removed in Phase 0.6. A brand chip row
- * appears under the heading until Phase 0.7's full filter bar lands.
+ * Shares the Phase 0.7 filter bar with /produkter and /sok.
  */
 export default async function CategoryPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
   const sp = await searchParams;
+  const filters = parseActiveFilters(sp);
 
-  const page = Math.max(1, parseInt(sp.side ?? "1", 10) || 1);
-  const brand = sp.merke;
+  const sideRaw = sp.side;
+  const sideStr = Array.isArray(sideRaw) ? sideRaw[0] : sideRaw;
+  const page = Math.max(1, parseInt(sideStr ?? "1", 10) || 1);
 
-  const [category, cookieStore] = await Promise.all([
+  const [category, makes, savedMachines, cookieStore] = await Promise.all([
     resolveCategoryPath(slug),
+    prisma.machineMake.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getSavedMachinesForFilter(),
     cookies(),
   ]);
 
   if (!category) notFound();
 
-  const [{ products, total, totalPages }, brands] = await Promise.all([
-    listProducts({ categoryId: category.id, brand, page }),
-    getActiveBrands(category.id),
+  const [{ products, total, totalPages }, modelsForMake] = await Promise.all([
+    listProducts({
+      categoryId: category.id,
+      brand: filters.brand,
+      page,
+      conditions: filters.conditions,
+      provenances: filters.provenances,
+      makeId: filters.makeId,
+      modelId: filters.modelId,
+    }),
+    filters.makeId
+      ? prisma.machineModel.findMany({
+          where: { makeId: filters.makeId },
+          select: { id: true, makeId: true, name: true },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([] as { id: string; makeId: string; name: string }[]),
   ]);
 
   const rawType = cookieStore.get("customer-type")?.value;
@@ -73,54 +94,13 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
         </p>
       )}
 
-      {/* Brand chip row — temporary until Phase 0.7 introduces the
-          full filter bar. */}
-      {brands.length > 0 && (
-        <div
-          style={{
-            marginBottom: "1.5rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            flexWrap: "wrap",
-            fontSize: "0.85rem",
-            color: "#374151",
-          }}
-        >
-          <span style={{ fontWeight: 600, color: "#475569" }}>Merke:</span>
-          {brands.map((b) => {
-            const active = brand === b;
-            const qp = new URLSearchParams();
-            if (b !== brand) qp.set("merke", b);
-            const href = `${basePath}${qp.toString() ? `?${qp}` : ""}`;
-            return (
-              <a
-                key={b}
-                href={href}
-                style={{
-                  padding: "0.2rem 0.7rem",
-                  borderRadius: "9999px",
-                  border: active ? "1px solid #1d4ed8" : "1px solid #cbd5e1",
-                  background: active ? "#1d4ed8" : "#fff",
-                  color: active ? "#fff" : "#0f172a",
-                  textDecoration: "none",
-                  fontWeight: active ? 600 : 500,
-                }}
-              >
-                {b}
-              </a>
-            );
-          })}
-          {brand && (
-            <a
-              href={basePath}
-              style={{ color: "#94a3b8", fontSize: "0.8rem", textDecoration: "underline" }}
-            >
-              Fjern filter
-            </a>
-          )}
-        </div>
-      )}
+      <ProductListingFilters
+        basePath={basePath}
+        active={filters}
+        makes={makes}
+        modelsForMake={modelsForMake}
+        savedMachines={savedMachines}
+      />
 
       {products.length === 0 ? (
         <p style={{ color: "#666" }}>Ingen produkter i denne kategorien.</p>
@@ -154,10 +134,13 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
             >
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
                 const qp = new URLSearchParams();
-                if (brand) qp.set("merke", brand);
+                if (filters.conditions.length > 0) qp.set("condition", filters.conditions.join(","));
+                if (filters.provenances.length > 0) qp.set("provenance", filters.provenances.join(","));
+                if (filters.makeId) qp.set("makeId", filters.makeId);
+                if (filters.modelId) qp.set("modelId", filters.modelId);
+                if (filters.brand) qp.set("merke", filters.brand);
                 if (p > 1) qp.set("side", String(p));
                 const href = `${basePath}${qp.toString() ? `?${qp}` : ""}`;
-
                 return (
                   <a
                     key={p}

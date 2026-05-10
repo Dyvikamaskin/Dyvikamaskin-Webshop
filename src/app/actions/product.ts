@@ -4,6 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { enrichProductDirectly } from "@/lib/product-enrichment";
 import { runFitmentEnrichmentForProduct } from "@/lib/fitment-enrichment";
 import { findOrCreateCategoryByPath } from "@/app/actions/category";
+import {
+  ProductCondition,
+  ConditionRating,
+  PartProvenance,
+} from "@/app/generated/prisma/enums";
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -29,6 +34,15 @@ export interface CreateProductInput {
   mvaRate?:             number;
   isActive?:            boolean;
   replacesPartNumbers?: string[];
+  // ── Phase 0.7 — Condition & provenance ──────────────────────────
+  /** Defaults to NEW. */
+  condition?:           ProductCondition;
+  /** Required when condition === USED. */
+  conditionRating?:     ConditionRating | null;
+  /** Free-text notes; usually only used when condition === USED. */
+  conditionNotes?:      string;
+  /** Defaults to AFTERMARKET on manual creation. */
+  provenance?:          PartProvenance;
 }
 
 export interface CreateProductResult {
@@ -51,6 +65,15 @@ export async function createProductAction(
   if (!data.name?.trim()) return { ok: false, error: "Navn er påkrevd." };
   if (!data.priceBase || isNaN(Number(data.priceBase))) {
     return { ok: false, error: "Ugyldig pris." };
+  }
+
+  // Cross-field: USED requires a rating. Notes alone do not satisfy.
+  const condition = data.condition ?? ProductCondition.NEW;
+  if (condition === ProductCondition.USED && !data.conditionRating) {
+    return {
+      ok: false,
+      error: "Tilstandsgrad er påkrevd når tilstand er Brukt.",
+    };
   }
 
   try {
@@ -89,6 +112,12 @@ export async function createProductAction(
         mvaRate:              data.mvaRate                  ?? 0.25,
         isActive:             data.isActive                 ?? true,
         replacesPartNumbers,
+        condition,
+        conditionRating: condition === ProductCondition.USED
+          ? data.conditionRating ?? null
+          : null,
+        conditionNotes: data.conditionNotes?.trim() || null,
+        provenance: data.provenance ?? PartProvenance.AFTERMARKET,
       },
     });
 

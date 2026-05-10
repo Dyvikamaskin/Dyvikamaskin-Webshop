@@ -4,6 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createProductAction } from "@/app/actions/product";
 import { CategoryPicker } from "@/components/admin/CategoryPicker";
+import {
+  ProductCondition,
+  ConditionRating,
+  PartProvenance,
+} from "@/app/generated/prisma/enums";
 
 interface Category {
   id:   string;
@@ -15,6 +20,20 @@ interface Category {
 interface Props {
   categories: Category[];
 }
+
+const RATING_LABELS: Record<ConditionRating, string> = {
+  AS_NEW: "Som ny",
+  EXCELLENT: "Utmerket",
+  GOOD: "God",
+  FAIR: "Akseptabel",
+  POOR: "Slitt",
+};
+
+const PROVENANCE_LABELS: Record<PartProvenance, string> = {
+  GENUINE: "Originaldeler",
+  OEM: "OEM-deler",
+  AFTERMARKET: "Uoriginale deler / Aftermarket",
+};
 
 // ─── Shared input style ───────────────────────────────────────────────────────
 
@@ -51,6 +70,8 @@ export default function NyttProduktForm({ categories }: Props) {
   const [error,               setError]               = useState<string | null>(null);
   const [replacesPartNumbers, setReplacesPartNumbers] = useState<string[]>([]);
   const [replaceInput,        setReplaceInput]        = useState("");
+  const [condition,           setCondition]           = useState<ProductCondition>(ProductCondition.NEW);
+  const [provenance,          setProvenance]          = useState<PartProvenance>(PartProvenance.AFTERMARKET);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -59,6 +80,7 @@ export default function NyttProduktForm({ categories }: Props) {
 
     const fd = new FormData(e.currentTarget);
 
+    const ratingRaw = fd.get("conditionRating") as string | null;
     const result = await createProductAction({
       sku:                  (fd.get("sku")              as string).trim(),
       name:                 (fd.get("name")             as string).trim(),
@@ -70,6 +92,12 @@ export default function NyttProduktForm({ categories }: Props) {
       mvaRate:              parseFloat(fd.get("mvaRate") as string) || 0.25,
       isActive:             fd.get("isActive") !== "false",
       replacesPartNumbers,
+      condition,
+      conditionRating: condition === ProductCondition.USED && ratingRaw
+        ? (ratingRaw as ConditionRating)
+        : null,
+      conditionNotes: (fd.get("conditionNotes") as string) || undefined,
+      provenance,
     });
 
     setPending(false);
@@ -292,6 +320,101 @@ export default function NyttProduktForm({ categories }: Props) {
         <div>
           <label style={labelStyle}>Kategori</label>
           <CategoryPicker categories={categories} />
+        </div>
+
+        {/* Tilstand (Phase 0.7) */}
+        <div>
+          <label style={labelStyle}>Tilstand</label>
+          <div style={{ display: "flex", gap: "1rem" }}>
+            {(Object.values(ProductCondition) as ProductCondition[]).map((c) => (
+              <label key={c} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.875rem", cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="condition"
+                  value={c}
+                  checked={condition === c}
+                  onChange={() => setCondition(c)}
+                />
+                {c === "NEW" ? "Ny" : "Brukt"}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {condition === ProductCondition.USED && (
+          <>
+            <div>
+              <label htmlFor="conditionRating" style={labelStyle}>Tilstandsgrad *</label>
+              <select
+                id="conditionRating"
+                name="conditionRating"
+                style={inputStyle}
+                defaultValue=""
+                required
+              >
+                <option value="">— Velg —</option>
+                {(Object.values(ConditionRating) as ConditionRating[]).map((r) => (
+                  <option key={r} value={r}>
+                    {RATING_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+              <p style={hintStyle}>Påkrevd når tilstand er Brukt.</p>
+            </div>
+            <div>
+              <label htmlFor="conditionNotes" style={labelStyle}>Tilstandsnotat</label>
+              <textarea
+                id="conditionNotes"
+                name="conditionNotes"
+                rows={2}
+                style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }}
+                placeholder="F.eks. mindre riper i lakk, full funksjonalitet"
+              />
+            </div>
+          </>
+        )}
+
+        {/* Opphav (Phase 0.7) */}
+        <div>
+          <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            Opphav
+            <a
+              href="/info/deletyper"
+              target="_blank"
+              rel="noopener"
+              title="Hva betyr Originaldeler / OEM / Aftermarket?"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "1rem",
+                height: "1rem",
+                borderRadius: "50%",
+                background: "#e2e8f0",
+                color: "#475569",
+                fontSize: "0.7rem",
+                fontWeight: 700,
+                textDecoration: "none",
+                fontFamily: "serif",
+              }}
+            >
+              i
+            </a>
+          </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            {(Object.values(PartProvenance) as PartProvenance[]).map((p) => (
+              <label key={p} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.875rem", cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="provenance"
+                  value={p}
+                  checked={provenance === p}
+                  onChange={() => setProvenance(p)}
+                />
+                {PROVENANCE_LABELS[p]}
+              </label>
+            ))}
+          </div>
         </div>
 
         {/* Aktiv */}

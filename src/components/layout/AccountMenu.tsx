@@ -57,6 +57,12 @@ export function AccountMenu({ userName, userRole }: AccountMenuProps) {
         >
           Min konto
         </Link>
+        <Link
+          href="/konto/mine-maskiner"
+          className="block px-4 py-2 text-sm text-slate-800 hover:bg-slate-50"
+        >
+          Mine maskiner
+        </Link>
         {isAdmin ? (
           <Link
             href="/admin"

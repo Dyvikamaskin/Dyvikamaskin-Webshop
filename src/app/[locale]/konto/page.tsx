@@ -230,26 +230,30 @@ export default async function KontoPage() {
         )}
       </section>
 
-      {/* ─── Security / quick links ──────────────────────────────────── */}
+      {/* ─── Quick links ─────────────────────────────────────────────── */}
       <section
         style={{
           background: "#fff",
           border: "1px solid #e2e8f0",
           borderRadius: "12px",
           padding: "1.5rem",
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.5rem",
         }}
       >
-        <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0, marginBottom: "1rem", color: "#0f172a" }}>
-          Sikkerhet
+        <h2 style={{ fontSize: "1.05rem", fontWeight: 700, margin: 0, marginBottom: "0.5rem", color: "#0f172a" }}>
+          Snarveier
         </h2>
         <a
+          href="/konto/mine-maskiner"
+          style={{ color: "#1e40af", textDecoration: "underline", fontSize: "0.9rem" }}
+        >
+          Mine maskiner
+        </a>
+        <a
           href="/glemt-passord"
-          style={{
-            display: "inline-block",
-            color: "#1e40af",
-            textDecoration: "underline",
-            fontSize: "0.9rem",
-          }}
+          style={{ color: "#1e40af", textDecoration: "underline", fontSize: "0.9rem" }}
         >
           Endre passord
         </a>
