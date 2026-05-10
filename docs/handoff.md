@@ -1,8 +1,8 @@
 # Session handoff — IndustriParts v4.1 work
 
-**As of 10 May 2026.** This page captures the live state of the v4.1 upgrade
-work so a new developer (or a fresh Claude Code session) can pick it up
-without reading the full chat transcript.
+**As of 10 May 2026 (late session).** This page captures the live state of
+the v4.1 upgrade work so a new developer (or a fresh Claude Code session)
+can pick it up without reading the full chat transcript.
 
 For deep context read these in order:
 1. **This file** — current state, decisions, what's next.
@@ -12,13 +12,15 @@ For deep context read these in order:
 
 ## Where the code is
 
-Current branch: `phase-0-7-condition-provenance-filters` (`f487372`, pushed to origin).
+Current branch: `phase-3-vipps-capture-stock-reservations` (`eae5759`, pushed to origin).
 
 Branch stack (newest on top — each builds on the previous):
 
 | Branch | Latest commit | Phase |
 |--------|--------------|-------|
-| `phase-0-7-condition-provenance-filters` | `f487372` | 0.7 |
+| `phase-3-vipps-capture-stock-reservations` | `eae5759` | 3 |
+| `phase-2-money-correctness` | `5af16ff` | 2 |
+| `phase-0-7-condition-provenance-filters` | `8ea6009` | 0.7 + docs refresh |
 | `phase-0-6-dynamic-categories` | `4874c88` | 0.6 + handoff doc |
 | `phase-0-5-storefront-chrome` | `beec854` | 0.5 |
 | `phase-1-foundations` | `f9bb613` | 1 |
@@ -35,41 +37,29 @@ When ready to merge, the chain merges into `main` in order.
 | 0 Triage | ✅ Shipped | Logout via Server Action; `/konto` page; static link-audit script |
 | 0.5 Storefront chrome | ✅ Shipped | TopBar, PrimaryNav, CategoryDrawer (multi-pane drilldown), InfoCardsRow |
 | 0.6 Dynamic categories | ✅ Shipped | `findOrCreateCategoryByPath`, CategoryPicker combobox, `/admin/kategorier`, static sidebar removed |
-| 0.7 Condition / provenance / filters / My Machines | ✅ Shipped | Schema additions, admin form fields, visible filter bar on listings, `/info/deletyper`, `/konto/mine-maskiner`, condition + provenance badges on PDP |
-| 1 Foundations | ✅ Shipped (with caveat) | Vitest, Playwright, CI workflow. **Two Prisma migrations queued, NOT yet applied to DB** — see "Pending migrations" below |
-| 2 Money correctness (Decimal) | ⏳ Awaiting user sign-off | Phase has legal/financial implications — see decisions section in plan |
-| 3 Vipps capture-on-dispatch | ⏳ Awaiting user sign-off | Forbrukerkjøpsloven §38 implications |
-| 4–9 | ⏳ Not started | |
+| 0.7 Condition / provenance / filters / My Machines | ✅ Shipped | Schema additions, admin form fields, visible filter bar on listings, `/info/deletyper`, `/konto/mine-maskiner`, condition + provenance badges on PDP. Migrations applied to prod. |
+| 1 Foundations | ✅ Shipped | Vitest, Playwright, CI workflow. WebhookEvent migration applied to prod. |
+| 2 Money correctness (Decimal) | ✅ Shipped | `Money` brand on Prisma.Decimal; pricing.ts rejects raw `number`; cart pipeline strings across the wire; Vipps webhook + MVA tax CSV use Decimal sums. 16 new edge-case tests. No schema change. |
+| 3 Vipps capture-on-dispatch + Stock reservations | ✅ Shipped | §38 compliance gap closed: capture-on-dispatch only. New `StockReservation` table; race fence at checkout. Webhook split (handleAuthorized/handleCaptured/handleVoided). `captureSaleOnDispatch` is the single dispatch entry point, wired into both admin "Mark shipped" and the MyBring label route. Migration applied to prod 2026-05-10. |
+| 4 Job queue (BullMQ) | ⏳ Not started | Decision needed: co-host worker (free) vs separate Railway service ($5/mo) |
+| 5–9 | ⏳ Not started | |
 
 ## Verified locally as of last commit
 
 - `npm run audit:links` — 41 pages, 18 APIs, **0 broken** (2 stub references tracked in registry)
-- `npm test` — **23/23** passing (KID/Luhn, modulo-11 Brreg, slugify)
-- `npm run typecheck` — clean against this work (only pre-existing stale `.next/types/validator.ts` stubs)
+- `npm test` — **49/49** passing across 5 test files (KID/Luhn, modulo-11 Brreg, slugify, pricing edge cases, stock reservations)
+- `npm run typecheck` — clean (only pre-existing stale `.next/types/validator.ts` stubs)
 
-## Pending Prisma migrations (not applied)
+## Production DB state
 
-Two migrations are committed in `prisma/migrations/` but **have not been
-applied to the production Supabase database yet**:
+All migrations through Phase 3 are applied. Last applied:
+`20260510140000_phase3_vipps_capture_stock_reservations` (2026-05-10 16:52 UTC).
 
-1. `20260509000000_phase15_webhook_event` — adds `WebhookEvent` table
-   for inbound webhook idempotency. Required before the Vipps webhook
-   handler runs in production (it now references `prisma.webhookEvent`).
-2. `20260510120000_phase07_condition_provenance_savedmachine` — adds
-   `condition`, `conditionRating`, `conditionNotes`, `provenance`
-   columns to `Product` plus the `SavedMachine` table. The Phase 0.7
-   storefront filter and product detail page query these columns; the
-   app will throw at runtime against an old DB.
-
-**Both migrations are additive** (new columns with defaults, new
-table). Safe to run on a live DB with existing rows.
-
-To apply when ready to deploy:
-```
-npx prisma migrate deploy
-```
-Or, via the Supabase MCP: `mcp__supabase__apply_migration` for each
-migration.
+The schema is **ahead of `main`** — `main` is still at `487869a` (docs only).
+Railway tracks `main`, so production traffic is on pre-Phase-0.5 code while
+the DB has the Phase 3 schema. All Phase 2/3 schema additions are nullable or
+default-valued, so the running pre-Phase-0.5 code reads the new shape without
+issue. Ship the merge train when the next phase milestone lands.
 
 ## Open follow-ups (small, tracked)
 
@@ -108,18 +98,27 @@ migration.
 - **Worker hosting (Phase 4):** co-hosted in main process initially;
   split to dedicated Railway service only if memory pressure forces it.
 
+## Decisions made in Phase 2 + 3 conversations
+
+- **B2B payment paths:** Vipps **or** invoice today. Bank transfer + credit
+  card are future expansion (no Phase 3 special-casing required).
+- **Phase 2 historical-data policy:** moot — 0 sales in DB at the time of
+  refactor, so the snapshot-vs-recompute question evaporated. Deployed as a
+  pure pre-launch refactor.
+- **Phase 3 grandfathering:** skipped entirely. 0 in-flight AUTHORIZED
+  orders to migrate. Capture-on-dispatch is the only behaviour from day one.
+- **Phase 3 feature flag:** the plan's `VIPPS_CAPTURE_ON_DISPATCH=true`
+  soak-window flag was dropped (no live traffic to soak against). A simpler
+  emergency kill-switch (`VIPPS_DISABLE_CAPTURE`) is the recommended
+  shape — not yet implemented; add when post-launch operations need it.
+- **Decimal library:** plan's `decimal.js-light` was replaced with Prisma 7's
+  bundled `decimal.js` directly to avoid a dual-decimal-library bundle.
+
 ## Decisions still pending — need user sign-off before code
 
-These are flagged in the plan and must not be implemented without explicit user approval:
-
-1. **Phase 2 — Decimal correctness historical-data policy.** Default
-   recommendation: snapshot-only on past sales, never recompute. User
-   must confirm.
-2. **Phase 3 — Vipps capture-on-dispatch grandfather behaviour.** What
-   happens to in-flight `AUTHORIZED` orders when the new code deploys?
-   Default: capture them the old way as a one-time grandfathering, new
-   orders use the new flow.
-3. **Phase 6 — MFA grace period for existing admins.** Default 7 days.
+1. **Phase 6 — MFA grace period for existing admins.** Default 7 days.
+2. **Phase 4 — Worker hosting.** Co-host in main process (free, dies on
+   scale-down) vs separate Railway service (+$5/mo). Default A.
 
 ## Infra state
 
@@ -150,15 +149,38 @@ Then either continue this conversation in Claude Desktop, or open a fresh Claude
 
 The project memory file at `~/.claude/projects/C--Users-Ventura-AI/memory/project_industriparts.md` has been updated with phase progress, so any new Claude Code session in this repo automatically loads phase awareness. (Note: project memory is per-Anthropic-account; a different account starts fresh and must read the docs directly.)
 
+## Open follow-ups not in any phase commit
+
+- **Refund flow** (Phase 3 follow-up). The Vipps `REFUNDED` webhook is
+  currently logged-only; no Sale lifecycle update, no admin "Refund" UI.
+  When refunds become operationally relevant, add `handleRefund` in the
+  webhook + an admin action that calls `refundVippsPayment` and marks
+  `Sale.status = REFUNDED`.
+- **Phase 2 polish** — 9 remaining display-side `.toNumber()` sites in
+  admin pages (`/admin/page.tsx`, `/admin/regnskap/page.tsx`,
+  `/admin/mva-rapport/page.tsx`), `/betaling/bekreftelse`,
+  `invoice-pdf.tsx`, `notification-service.ts`. None affect money
+  correctness — formatters now accept Decimal so the redundant
+  `.toNumber()` calls can be dropped.
+- **Phase 3 integration test** — the plan's "50 parallel checkouts on
+  the last unit, zero overcommits" test needs real-DB infra
+  (testcontainers or a Supabase preview branch). Deferred until that
+  infrastructure exists.
+- **Edit-product editable form** at `/admin/produkter/[sku]/rediger`.
+- **Drag-to-reorder** in `/admin/kategorier`. Server action exists.
+- **Brand chip-row tidy-up** on `/produkter`.
+
 ## What to start on next
 
-Recommended order for the new developer:
+1. **Phase 4 — Job queue (BullMQ).** Confirm worker-hosting decision
+   (co-host vs separate Railway service), then build out the queue + 4
+   worker domains (enrichment, pdf, email, sms). Replaces the existing
+   fire-and-forget patterns and the current `/api/jobs/expire-reservations`
+   cron.
+2. **Open follow-ups** as appetite allows.
+3. **Phase 5 — Search (pg_trgm + FTS).** Pure additive on `Product` plus a
+   trigger; no decision-making needed before starting.
 
-1. **Apply the two pending Prisma migrations** to the production Supabase DB (or first to a separate dev DB if available):
-   ```
-   npx prisma migrate deploy
-   ```
-   The Phase 0.5 + 0.6 + 0.7 storefront code currently does not run against the live DB until both migrations are applied. The migrations are additive and safe.
-2. **Verify Phase 0.5 + 0.6 + 0.7 in browser.** Reload localhost, walk through the new chrome, drawer, /admin/kategorier, /admin/produkter/ny (new condition + provenance fields), /produkter (filter bar), /info/deletyper, /konto/mine-maskiner.
-3. **Address open follow-ups** if appetite (drag-to-reorder, edit-product editable form, brand chip-row tidy-up).
-4. **Phase 2 / 3** — but stop and explicitly confirm the legal/financial decisions in the "Decisions still pending" section above before touching pricing or Vipps capture timing.
+Or, if you want to ship what's already on the stack: merge the Phase
+0–3 chain into `main` so Railway picks it up. The schema is already
+prod-ready and the code is gated by typecheck + 49 unit tests.
