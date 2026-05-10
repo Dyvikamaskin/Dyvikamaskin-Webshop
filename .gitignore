@@ -57,3 +57,7 @@ next-env.d.ts
 /playwright-report
 /test-results
 /.playwright
+
+.env.claude-code-pat
+
+.env.claude-code-pat

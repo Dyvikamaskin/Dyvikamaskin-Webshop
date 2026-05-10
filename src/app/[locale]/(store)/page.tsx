@@ -1,19 +1,19 @@
 import { listProducts } from "@/lib/products";
-import { getCategoryTree } from "@/lib/categories";
 import { ProductCard } from "@/components/product/ProductCard";
-import { CategoryNav } from "@/components/category/CategoryNav";
 import { InfoCardsRow } from "@/components/layout/InfoCardsRow";
 import { cookies } from "next/headers";
 import type { CustomerTypeValue } from "@/lib/stores/use-customer-type";
 
 /**
  * Home page — product catalog landing.
- * Shows the category navigation and the first page of active products.
+ *
+ * Categories are reached via the hamburger drawer (Phase 0.5). The old
+ * inline left-side category list was removed in Phase 0.6 because it
+ * duplicated the drawer.
  */
 export default async function HomePage() {
-  const [{ products }, categories, cookieStore] = await Promise.all([
+  const [{ products }, cookieStore] = await Promise.all([
     listProducts({ limit: 12 }),
-    getCategoryTree(),
     cookies(),
   ]);
 
@@ -24,36 +24,33 @@ export default async function HomePage() {
   return (
     <>
       <InfoCardsRow />
-      <main style={{ padding: "1.5rem", fontFamily: "sans-serif", maxWidth: "1200px", margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: "2rem" }}>
-        {/* Sidebar */}
-        <aside>
-          <CategoryNav categories={categories} />
-        </aside>
-
-        {/* Product grid */}
-        <section>
-          {products.length === 0 ? (
-            <p style={{ color: "#666" }}>Ingen produkter tilgjengelig ennå.</p>
-          ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-                gap: "1.25rem",
-              }}
-            >
-              {products.map((product) => (
-                <ProductCard
-                  key={product.sku}
-                  product={product}
-                  customerType={customerType}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-        </div>
+      <main
+        style={{
+          padding: "1.5rem",
+          fontFamily: "sans-serif",
+          maxWidth: "1280px",
+          margin: "0 auto",
+        }}
+      >
+        {products.length === 0 ? (
+          <p style={{ color: "#666" }}>Ingen produkter tilgjengelig ennå.</p>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              gap: "1.25rem",
+            }}
+          >
+            {products.map((product) => (
+              <ProductCard
+                key={product.sku}
+                product={product}
+                customerType={customerType}
+              />
+            ))}
+          </div>
+        )}
       </main>
     </>
   );
