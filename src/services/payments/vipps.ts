@@ -18,6 +18,14 @@
  *
  * Both paths converge on stock+reservations bookkeeping; only the Vipps
  * path triggers an external payment side effect.
+ *
+ * Kill-switch — VIPPS_DISABLE_CAPTURE
+ *   When set ("1" or "true"), the Vipps capture API call is skipped on
+ *   the Vipps path. Stock still decrements and reservations still release
+ *   so warehouse can dispatch parcels during a Vipps outage. The Sale
+ *   stays at AUTHORIZED — admin must reconcile capture via the Vipps
+ *   portal (or by clearing the flag and re-running this entry point)
+ *   once Vipps is back online.
  */
 import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -26,8 +34,19 @@ import { releaseReservations } from "@/services/inventory/reservations";
 import { OrderStatus } from "@/app/generated/prisma/enums";
 
 export type DispatchResult =
-  | { ok: true; captured: boolean; capturedAmount?: string }
+  | { ok: true; captured: boolean; capturedAmount?: string; captureSuppressed?: boolean }
   | { ok: false; error: string };
+
+/**
+ * Env-driven kill-switch. Read at call time (not module load) so toggling
+ * the flag on Railway takes effect on the next dispatch without a redeploy.
+ */
+function isVippsCaptureDisabled(): boolean {
+  const v = process.env.VIPPS_DISABLE_CAPTURE;
+  if (!v) return false;
+  const lowered = v.toLowerCase();
+  return lowered === "1" || lowered === "true";
+}
 
 /**
  * Commit a Sale at dispatch — capture payment (if Vipps) and consume stock.
@@ -60,11 +79,21 @@ export async function captureSaleOnDispatch(saleId: string): Promise<DispatchRes
   const isVippsPath = sale.vippsReference !== null;
   const alreadyCaptured = sale.capturedAt !== null;
   const alreadyShipped = sale.shippedAt !== null;
+  const captureSuppressed =
+    isVippsPath && !alreadyCaptured && isVippsCaptureDisabled();
+
+  if (captureSuppressed) {
+    console.warn(
+      "[captureSaleOnDispatch] VIPPS_DISABLE_CAPTURE active — Vipps capture skipped, " +
+        "Sale stays AUTHORIZED. Reconcile capture via Vipps portal once back online.",
+      { saleId, totalPrice: sale.totalPrice.toString() },
+    );
+  }
 
   // 1. Capture via Vipps if applicable. Done OUTSIDE the DB transaction so
   // the external API call doesn't hold a long-lived database lock.
   let capturedAmount: Prisma.Decimal | undefined;
-  if (isVippsPath && !alreadyCaptured) {
+  if (isVippsPath && !alreadyCaptured && !captureSuppressed) {
     try {
       await captureVippsPayment(sale.checkoutSessionId, toOre(sale.totalPrice));
       capturedAmount = sale.totalPrice;
@@ -98,7 +127,7 @@ export async function captureSaleOnDispatch(saleId: string): Promise<DispatchRes
 
     await releaseReservations(sale.checkoutSessionId, tx);
 
-    if (isVippsPath && !alreadyCaptured) {
+    if (isVippsPath && !alreadyCaptured && !captureSuppressed) {
       await tx.sale.update({
         where: { id: saleId },
         data: {
@@ -113,7 +142,8 @@ export async function captureSaleOnDispatch(saleId: string): Promise<DispatchRes
 
   return {
     ok: true,
-    captured: isVippsPath && !alreadyCaptured,
+    captured: isVippsPath && !alreadyCaptured && !captureSuppressed,
     capturedAmount: capturedAmount?.toString(),
+    ...(captureSuppressed ? { captureSuppressed: true } : {}),
   };
 }

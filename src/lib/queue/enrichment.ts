@@ -11,6 +11,7 @@
  */
 import { Queue, Worker, type Job } from "bullmq";
 import { getRedisConnection } from "@/lib/queue/connection";
+import { reportJobFailure } from "@/lib/sentry";
 
 const QUEUE_NAME = "enrichment";
 
@@ -86,6 +87,7 @@ export function startEnrichmentWorker(): Worker<EnrichmentJobData> {
       { jobId: job?.id, sku: job?.data?.sku, attemptsMade: job?.attemptsMade },
       err,
     );
+    void reportJobFailure(QUEUE_NAME, job, err);
   });
   return worker;
 }

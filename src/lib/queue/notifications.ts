@@ -12,6 +12,7 @@
  */
 import { Queue, Worker, type Job } from "bullmq";
 import { getRedisConnection } from "@/lib/queue/connection";
+import { reportJobFailure } from "@/lib/sentry";
 
 const QUEUE_NAME = "notifications";
 
@@ -136,6 +137,7 @@ export function startNotificationsWorker(): Worker<NotificationJobData> {
       { jobId: job?.id, kind: job?.data?.kind, attemptsMade: job?.attemptsMade },
       err,
     );
+    void reportJobFailure(QUEUE_NAME, job, err);
   });
   return worker;
 }
