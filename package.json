@@ -31,6 +31,7 @@
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
     "bullmq": "^5.76.6",
+    "decimal.js": "^10.6.0",
     "html5-qrcode": "^2.3.8",
     "ioredis": "^5.10.1",
     "next": "16.2.5",

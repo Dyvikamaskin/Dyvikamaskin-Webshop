@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Prisma } from "@/app/generated/prisma/client";
+// decimal.js directly — `Prisma.Decimal` is the same library, but the
+// generated Prisma client export pulls server-only Node modules
+// (node:module) that Turbopack rejects in client bundles.
+import Decimal from "decimal.js";
 import { useCartStore } from "@/lib/stores/use-cart";
 import { validateCartAction } from "@/app/actions/cart";
 import { formatPrice, formatNumber } from "@/lib/formatters";
@@ -9,7 +12,7 @@ import type { ValidatedCart } from "@/lib/cart";
 import Link from "next/link";
 import { CheckoutButton } from "@/components/cart/CheckoutButton";
 
-const D = Prisma.Decimal;
+const D = Decimal;
 
 /**
  * Client-side cart content component.

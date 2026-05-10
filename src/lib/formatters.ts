@@ -1,21 +1,26 @@
 /**
  * Display formatters — Phase 2 (Money correctness).
  *
- * Display-side is intentionally permissive: it accepts Prisma.Decimal,
+ * Display-side is intentionally permissive: it accepts a Decimal
+ * instance (Prisma.Decimal IS decimal.js — same class, both work),
  * a decimal-formatted string, or a raw number. The strict-input rule
  * lives in `pricing.ts` (where coercion would silently lose precision).
  * Once a value reaches the formatter, computation is done.
+ *
+ * formatters.ts is consumed by both server and client components,
+ * so it imports decimal.js directly. The Prisma client export is
+ * fused with server-only Node modules (node:module) that Turbopack
+ * rejects in client bundles — see Phase 4 deploy fix.
  */
-import { Prisma } from "@/app/generated/prisma/client";
+import Decimal from "decimal.js";
 
 const noLocale = "nb-NO";
-const D = Prisma.Decimal;
 
 /** Anything a formatter is willing to render. */
-export type Displayable = Prisma.Decimal | string | number;
+export type Displayable = Decimal | string | number;
 
-function asDecimal(value: Displayable): Prisma.Decimal {
-  return value instanceof D ? value : new D(value);
+function asDecimal(value: Displayable): Decimal {
+  return value instanceof Decimal ? value : new Decimal(value);
 }
 
 // ─── Number formatters ────────────────────────────────────────────────────────
