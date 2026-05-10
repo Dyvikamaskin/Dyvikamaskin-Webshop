@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createProductAction } from "@/app/actions/product";
+import { CategoryPicker } from "@/components/admin/CategoryPicker";
 
 interface Category {
   id:   string;
   name: string;
-  slug: string;
+  /** Full slash-path from root, e.g. "verktoy/elektroverktoy". */
+  path: string;
 }
 
 interface Props {
@@ -64,7 +66,7 @@ export default function NyttProduktForm({ categories }: Props) {
       brand:                (fd.get("brand")            as string) || undefined,
       shortDescription:     (fd.get("shortDescription") as string) || undefined,
       partNumber:           (fd.get("partNumber")       as string) || undefined,
-      categoryId:           (fd.get("categoryId")       as string) || undefined,
+      categoryPath:         (fd.get("categoryPath")     as string) || undefined,
       mvaRate:              parseFloat(fd.get("mvaRate") as string) || 0.25,
       isActive:             fd.get("isActive") !== "false",
       replacesPartNumbers,
@@ -288,15 +290,8 @@ export default function NyttProduktForm({ categories }: Props) {
 
         {/* Kategori */}
         <div>
-          <label htmlFor="categoryId" style={labelStyle}>Kategori</label>
-          <select id="categoryId" name="categoryId" style={inputStyle} defaultValue="">
-            <option value="">— Ingen kategori —</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <label style={labelStyle}>Kategori</label>
+          <CategoryPicker categories={categories} />
         </div>
 
         {/* Aktiv */}

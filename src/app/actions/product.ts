@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { enrichProductDirectly } from "@/lib/product-enrichment";
 import { runFitmentEnrichmentForProduct } from "@/lib/fitment-enrichment";
+import { findOrCreateCategoryByPath } from "@/app/actions/category";
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -13,15 +14,39 @@ export interface CreateProductInput {
   brand?:               string;
   shortDescription?:    string;
   partNumber?:          string;
+  /**
+   * Pre-existing category id selected from a dropdown.
+   * Mutually preferable to categoryPath when both are set, but
+   * categoryPath wins if non-empty (for the auto-create flow).
+   */
   categoryId?:          string;
+  /**
+   * Slash-separated path. New segments are auto-created via
+   * findOrCreateCategoryByPath. Wins over `categoryId` when present.
+   * Phase 0.6 of v4.1-implementation-plan.md.
+   */
+  categoryPath?:        string;
   mvaRate?:             number;
   isActive?:            boolean;
   replacesPartNumbers?: string[];
 }
 
+export interface CreateProductResult {
+  ok: boolean;
+  sku?: string;
+  error?: string;
+  /**
+   * Names of category segments newly created during this call (in
+   * root-to-leaf order). Empty when `categoryPath` was not used or all
+   * segments already existed. Lets the caller surface a "we created
+   * X" hint to the admin.
+   */
+  createdCategories?: string[];
+}
+
 export async function createProductAction(
   data: CreateProductInput
-): Promise<{ ok: boolean; sku?: string; error?: string }> {
+): Promise<CreateProductResult> {
   if (!data.sku?.trim())  return { ok: false, error: "SKU er påkrevd." };
   if (!data.name?.trim()) return { ok: false, error: "Navn er påkrevd." };
   if (!data.priceBase || isNaN(Number(data.priceBase))) {
@@ -36,6 +61,22 @@ export async function createProductAction(
       ? [...new Set(data.replacesPartNumbers.map((p) => p.trim()).filter(Boolean))]
       : [];
 
+    // Resolve category. categoryPath wins over categoryId when present.
+    let categoryId: string | null = data.categoryId?.trim() || null;
+    let createdCategories: string[] = [];
+
+    const path = data.categoryPath?.trim();
+    if (path) {
+      try {
+        const resolution = await findOrCreateCategoryByPath(path);
+        categoryId = resolution.leafId;
+        createdCategories = resolution.created;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Ugyldig kategoristi";
+        return { ok: false, error: message };
+      }
+    }
+
     await prisma.product.create({
       data: {
         sku:                  data.sku.trim(),
@@ -44,7 +85,7 @@ export async function createProductAction(
         brand:                data.brand?.trim()            || null,
         shortDescription:     data.shortDescription?.trim() || null,
         partNumber:           data.partNumber?.trim()       || null,
-        categoryId:           data.categoryId               || null,
+        categoryId,
         mvaRate:              data.mvaRate                  ?? 0.25,
         isActive:             data.isActive                 ?? true,
         replacesPartNumbers,
@@ -57,7 +98,11 @@ export async function createProductAction(
       runFitmentEnrichmentForProduct(data.sku.trim()),
     ]);
 
-    return { ok: true, sku: data.sku.trim() };
+    return {
+      ok: true,
+      sku: data.sku.trim(),
+      createdCategories: createdCategories.length > 0 ? createdCategories : undefined,
+    };
   } catch (err: unknown) {
     const error = err instanceof Error ? err.message : "Ukjent feil";
     return { ok: false, error };

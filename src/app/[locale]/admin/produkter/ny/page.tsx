@@ -1,11 +1,22 @@
-import { prisma } from "@/lib/prisma";
 import NyttProduktForm from "./_NyttProduktForm";
+import { getCategoryTree, type CategoryNode } from "@/lib/categories";
+
+/** Flatten the category tree into pickable rows with full slash-paths. */
+function flatten(nodes: CategoryNode[], parentPath: string[] = []): { id: string; name: string; path: string }[] {
+  const out: { id: string; name: string; path: string }[] = [];
+  for (const node of nodes) {
+    const path = [...parentPath, node.slug].join("/");
+    out.push({ id: node.id, name: node.name, path });
+    if (node.children.length) {
+      out.push(...flatten(node.children, [...parentPath, node.slug]));
+    }
+  }
+  return out;
+}
 
 export default async function NyttProduktPage() {
-  const categories = await prisma.category.findMany({
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, slug: true },
-  });
+  const tree = await getCategoryTree();
+  const categories = flatten(tree);
 
   return (
     <div style={{ padding: "2rem", maxWidth: "640px" }}>
@@ -29,7 +40,7 @@ export default async function NyttProduktPage() {
             padding: "0.6rem 0.9rem",
           }}
         >
-          ✨ Etter lagring kjøres <strong>produktberikelse</strong> (navn, merke, beskrivelse) og{" "}
+          Etter lagring kjøres <strong>produktberikelse</strong> (navn, merke, beskrivelse) og{" "}
           <strong>tilpasningsforslag</strong> automatisk i bakgrunnen.
           Tomme felter fylles inn — du kan redigere etterpå.
         </p>

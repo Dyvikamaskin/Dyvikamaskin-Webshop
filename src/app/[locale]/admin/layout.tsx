@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { href: "/admin",                label: "📊 Oversikt" },
   { href: "/admin/ordrer",         label: "📦 Ordrer" },
   { href: "/admin/produkter",      label: "🔧 Produkter" },
+  { href: "/admin/kategorier",     label: "🗃️ Kategorier" },
   { href: "/admin/batch",          label: "🚀 Batchutsending" },
   { href: "/admin/kunder",         label: "👥 Kunder" },
   { href: "/admin/kampanjer",      label: "🏷️ Kampanjer" },
