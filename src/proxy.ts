@@ -67,6 +67,11 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Skip API routes, Next internals, and static assets. next-intl can't
+    // route /api/* paths and silently 404s them otherwise — confirmed
+    // Phase 5 when /api/search returned 404 in prod despite being in the
+    // build manifest. /api/vipps/webhook had the same issue but went
+    // undetected because no live Vipps traffic had landed.
+    "/((?!api|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
