@@ -58,7 +58,7 @@ phase branches remain on origin as historical references.
 
 ## Verified locally as of last commit
 
-- `npm test` — **74/74** passing across 9 test files (kid, brreg, slugify, pricing, reservations, notifications-dispatch, enrichment-dispatch, search, age round-trip)
+- `npm test` — **77/77** passing across 10 test files (kid, brreg, slugify, pricing, reservations, notifications-dispatch, enrichment-dispatch, maintenance-dispatch, search, age round-trip)
 - `npm run typecheck` — clean (zero errors)
 - `npm run audit:links` — 41 pages, 18 APIs, **0 broken**, 2 known stub references (`/kampanjer`, `/info/finn-lager`)
 - Production smoke tests (HTTP):
@@ -171,13 +171,13 @@ introduced them. Loose-coupled — pick any in any order.
 
 ### Phase 4 follow-ups
 - **PDF queue split.** Invoice PDF rendering currently runs inside the `notifications:invoice-issued` job handler. Splitting it out lets us cap concurrency separately and add a polling endpoint for "is the invoice PDF ready yet?" UX.
-- **BullMQ-cron migration.** `/api/jobs/expire-reservations` is still a REST endpoint hit by the Railway `curl` cron service. BullMQ repeating jobs should replace this; once verified, retire the Railway curl service.
+- ~~**BullMQ-cron migration.**~~ ✅ Shipped — new `maintenance` queue in `src/lib/queue/maintenance.ts`. `expire-reservations-cron` runs every minute via `upsertJobScheduler` (BullMQ 5+ API; idempotent so safe under multi-instance Railway). `/api/jobs/expire-reservations` retained as a manual escape hatch for ops. **Operational follow-up:** once the BullMQ schedule is verified in production (Railway logs show `[maintenance] expired reservations` ticks), the Railway `curl` cron service should be deleted to retire the redundant HTTP path. `CRON_SECRET` stays needed for the escape hatch.
 - **Invoice 202 + polling.** The plan calls for the invoice route to return 202 immediately and expose a status-poll endpoint. Today the route is synchronous; deferred until the PDF queue above is in place.
 - ~~**Sentry alert wiring** for failed jobs.~~ ✅ Shipped — `src/lib/sentry.ts` `reportJobFailure(queueName, job, err)` called from both queue workers' `failed` handlers. Only terminal failures (attempts exhausted) report so retries don't flood. Sentry is initialized lazily in `src/instrumentation.ts` when `SENTRY_DSN` is set.
 - ~~**`VIPPS_DISABLE_CAPTURE` kill-switch.**~~ ✅ Shipped — env var read at call time inside `captureSaleOnDispatch`. When `"1"` or `"true"`, skips the Vipps capture API call but still decrements stock and releases reservations. Sale stays AUTHORIZED — admin reconciles capture via the Vipps portal post-outage. `DispatchResult` gains an optional `captureSuppressed: true` flag.
 
 ### Phase 4.5 follow-ups
-- **BullMQ repeating job at 02:00 UTC** for automatic daily backups (was deferred per the plan; depends on BullMQ-cron migration above).
+- **BullMQ repeating job at 02:00 UTC** for automatic daily backups (was deferred per the plan; **dependency unblocked — the maintenance queue exists**, just needs a `daily-backup` job kind + handler that pg_dumps and writes the encrypted artifact to Supabase Storage or similar).
 - **`BackupRun` model + `/admin/sikkerhetskopier`** admin page listing past runs.
 - **Multi-recipient age encryption** when there are multiple SUPER_ADMINs (so any of them can decrypt).
 - **Email + dashboard banner** when `lastBackupAt` is >7 days stale.

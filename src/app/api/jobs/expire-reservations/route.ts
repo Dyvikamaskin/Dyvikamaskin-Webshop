@@ -6,10 +6,14 @@ import { expireReservations } from "@/services/inventory/reservations";
  *
  * Sweeps StockReservation rows whose expiresAt has passed. Returns the
  * number of rows removed. Authenticated by a shared secret in the
- * `Authorization` header (`Bearer ${CRON_SECRET}`) so a Railway cron
- * service can hit it without a user session.
+ * `Authorization` header (`Bearer ${CRON_SECRET}`).
  *
- * BullMQ replaces this when Phase 4 lands.
+ * Scheduled sweeps run via the BullMQ `maintenance` queue (every minute,
+ * `expire-reservations-cron`); this endpoint is now retained only as a
+ * manual escape hatch for ops — useful if the workers are down or an
+ * admin wants to force an immediate sweep. The Railway `curl` cron
+ * service that previously hit this route on a schedule can be retired
+ * once the BullMQ schedule is verified in production.
  */
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;

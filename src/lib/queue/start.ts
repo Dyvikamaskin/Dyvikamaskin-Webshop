@@ -12,6 +12,10 @@
 import { isQueueConfigured } from "@/lib/queue/connection";
 import { startNotificationsWorker } from "@/lib/queue/notifications";
 import { startEnrichmentWorker } from "@/lib/queue/enrichment";
+import {
+  scheduleRecurringJobs,
+  startMaintenanceWorker,
+} from "@/lib/queue/maintenance";
 
 let started = false;
 
@@ -27,6 +31,18 @@ export function startWorkers(): void {
 
   startNotificationsWorker();
   startEnrichmentWorker();
+  startMaintenanceWorker();
+
+  // Cron schedules are installed on every boot. upsertJobScheduler is
+  // idempotent so this is safe even under multi-instance Railway. Fire
+  // and forget — a failure to install the schedule should not bring
+  // down the worker process; it'll be retried next boot.
+  void scheduleRecurringJobs().catch((err) => {
+    console.error("[queue] failed to install recurring schedules", err);
+  });
+
   started = true;
-  console.info("[queue] workers started: notifications, enrichment");
+  console.info(
+    "[queue] workers started: notifications, enrichment, maintenance",
+  );
 }
