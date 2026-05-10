@@ -29,9 +29,11 @@ const QUEUE_NAME = "maintenance";
 
 // ─── Job shapes ───────────────────────────────────────────────────────────────
 
-export type MaintenanceJobName = "expire-reservations";
+export type MaintenanceJobName = "expire-reservations" | "daily-backup";
 
-export type MaintenanceJobData = { kind: "expire-reservations" };
+export type MaintenanceJobData =
+  | { kind: "expire-reservations" }
+  | { kind: "daily-backup" };
 
 // ─── Queue (producer + scheduler) ─────────────────────────────────────────────
 
@@ -70,6 +72,26 @@ export async function scheduleRecurringJobs(): Promise<void> {
     { pattern: "* * * * *" },
     { name: "expire-reservations", data: { kind: "expire-reservations" } },
   );
+
+  // daily-backup: 02:00 UTC every day. Low-traffic window for most
+  // Norwegian customers (04:00 CET / 03:00 CEST in summer). The job
+  // is idempotent at the BackupRun level — if it fires twice on the
+  // same day from a multi-instance Railway rollout, BullMQ's scheduler
+  // lock prevents the second tick.
+  await q.upsertJobScheduler(
+    "daily-backup-cron",
+    { pattern: "0 2 * * *" },
+    {
+      name: "daily-backup",
+      data: { kind: "daily-backup" },
+      opts: {
+        // Backups can take minutes once the catalog fills out; give it
+        // headroom and only retry once before recording a FAILED run.
+        attempts: 2,
+        backoff: { type: "fixed", delay: 5 * 60_000 },
+      },
+    },
+  );
 }
 
 // ─── Worker (consumer) ────────────────────────────────────────────────────────
@@ -96,9 +118,23 @@ export async function processMaintenanceJob(
       }
       return;
     }
+    case "daily-backup": {
+      const { runScheduledBackup } = await import(
+        "@/lib/backup/scheduled-backup"
+      );
+      const result = await runScheduledBackup();
+      console.info("[maintenance] daily-backup", {
+        status: result.status,
+        backupRunId: result.backupRunId,
+        bytesWritten: result.bytesWritten,
+        storagePath: result.storagePath,
+        errorMessage: result.errorMessage,
+      });
+      return;
+    }
     default: {
-      const _exhaustive: never = job.data.kind;
-      throw new Error(`Unknown maintenance job: ${String(_exhaustive)}`);
+      const _exhaustive: never = job.data;
+      throw new Error(`Unknown maintenance job: ${JSON.stringify(_exhaustive)}`);
     }
   }
 }

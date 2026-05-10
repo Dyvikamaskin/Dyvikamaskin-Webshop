@@ -58,7 +58,7 @@ phase branches remain on origin as historical references.
 
 ## Verified locally as of last commit
 
-- `npm test` — **77/77** passing across 10 test files (kid, brreg, slugify, pricing, reservations, notifications-dispatch, enrichment-dispatch, maintenance-dispatch, search, age round-trip)
+- `npm test` — **80/80** passing across 10 test files (kid, brreg, slugify, pricing, reservations, notifications-dispatch, enrichment-dispatch, maintenance-dispatch (now incl. daily-backup), search, age round-trip)
 - `npm run typecheck` — clean (zero errors)
 - `npm run audit:links` — 41 pages, 18 APIs, **0 broken**, 2 known stub references (`/kampanjer`, `/info/finn-lager`)
 - Production smoke tests (HTTP):
@@ -79,6 +79,7 @@ All migrations through Phase 5 + 4.5 are applied. Sequence:
 20260510140000_phase3_vipps_capture_stock_reservations    (Phase 3)
 20260510200000_phase5_search_pgtrgm_fts                  (Phase 5)
 20260510210000_phase45_backup_mvp                        (Phase 4.5)
+20260510220000_phase45_backup_run                        (Phase 4.5 follow-up — daily backup)
 ```
 
 Verify any time:
@@ -177,10 +178,11 @@ introduced them. Loose-coupled — pick any in any order.
 - ~~**`VIPPS_DISABLE_CAPTURE` kill-switch.**~~ ✅ Shipped — env var read at call time inside `captureSaleOnDispatch`. When `"1"` or `"true"`, skips the Vipps capture API call but still decrements stock and releases reservations. Sale stays AUTHORIZED — admin reconciles capture via the Vipps portal post-outage. `DispatchResult` gains an optional `captureSuppressed: true` flag.
 
 ### Phase 4.5 follow-ups
-- **BullMQ repeating job at 02:00 UTC** for automatic daily backups (was deferred per the plan; **dependency unblocked — the maintenance queue exists**, just needs a `daily-backup` job kind + handler that pg_dumps and writes the encrypted artifact to Supabase Storage or similar).
-- **`BackupRun` model + `/admin/sikkerhetskopier`** admin page listing past runs.
-- **Multi-recipient age encryption** when there are multiple SUPER_ADMINs (so any of them can decrypt).
-- **Email + dashboard banner** when `lastBackupAt` is >7 days stale.
+- ~~**BullMQ repeating job at 02:00 UTC** for automatic daily backups.~~ ✅ Shipped — `daily-backup` job kind in the `maintenance` queue, scheduled `0 2 * * *`. `runScheduledBackup()` in `src/lib/backup/scheduled-backup.ts` picks the oldest SUPER_ADMIN with a `backupPublicKey`, streams `pg_dump → age-encrypt`, uploads to Supabase Storage at `backups/yyyy/mm/dd/industriparts-{ts}.sql.age`. Bumps `Profile.lastBackupAt` on every SUPER_ADMIN. 30-day retention with best-effort prune after each successful run. `SKIPPED` status when no admin has a key registered. Storage bucket is auto-created on first run.
+- ~~**`BackupRun` model.**~~ ✅ Shipped — `BackupRun(id, startedAt, finishedAt, status, recipientKey, storagePath, bytesWritten, errorMessage)` with `BackupRunStatus(RUNNING|SUCCESS|FAILED|SKIPPED)`. Migration `20260510220000_phase45_backup_run`.
+- **`/admin/sikkerhetskopier`** admin page listing past runs. Schema exists; UI not built yet. Read `BackupRun` ordered by `startedAt DESC` and render status + size + storagePath as a download link (need a signed-URL endpoint for that — Storage bucket is private).
+- **Multi-recipient age encryption** when there are multiple SUPER_ADMINs (so any of them can decrypt). Today's scheduled backup encrypts to one recipient — the oldest SUPER_ADMIN with a key. `encryptStream` in `lib/backup/age.ts` already supports `addRecipient` per recipient; the change is small once needed.
+- ~~**Email + dashboard banner** when `lastBackupAt` is stale.~~ ✅ Partial — `BackupWidget` now reads from the latest `BackupRun(status=SUCCESS)` instead of `Profile.lastBackupAt` (which lies about automatic backups because it ticks on every manual download). Staleness threshold tightened from 7 days to 2 days since automatic backups should run daily. Email alert still TODO.
 
 ### Phase 5 follow-ups
 - ~~**Storefront autocomplete dropdown.**~~ ✅ Shipped — `SearchBar` converted to a client component with 200 ms debounced fetch against `/api/search`. Keyboard navigation (↑/↓/Enter/Esc), mouse hover, outside-click close, route-change close. Form submit still GETs `/sok?q=…` as the no-JS / pre-hydration fallback.

@@ -36,6 +36,7 @@ const BATCH_SIZE = 200;
 export const BACKED_UP_TABLES = [
   "_prisma_migrations",
   "AuditLog",
+  "BackupRun",
   "Category",
   "FitmentProposal",
   "InvoiceCounter",
