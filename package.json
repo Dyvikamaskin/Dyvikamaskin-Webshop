@@ -41,6 +41,7 @@
     "pg-cursor": "^2.19.0",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
+    "react-cookie-consent": "^10.0.1",
     "react-dom": "19.2.4",
     "resend": "^6.12.3",
     "xmlbuilder2": "^4.0.3",
