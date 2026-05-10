@@ -256,6 +256,14 @@ model Product {
   conditionRating ConditionRating?    // required at app layer when condition = USED
   conditionNotes  String?
   provenance      PartProvenance   @default(AFTERMARKET)
+  // ─── Phase 5 search columns ──────────────────────────────────────────────
+  // Maintained by DB trigger; do not write from app code.
+  //   searchKey:    lowercase, dashes/spaces stripped from sku+partNumber+
+  //                 name for exact + trigram matching.
+  //   searchVector: tsvector built from name / sku / partNumber / brand
+  //                 for FTS rank.
+  searchKey            String?
+  searchVector         Unsupported("tsvector")?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 

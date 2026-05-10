@@ -178,13 +178,25 @@ export async function listProducts(
     where.brand = brand;
   }
 
+  // ─── Phase 5: search delegates to the catalog search service ─────
+  // The service runs a three-stage query (exact → trigram → FTS) and
+  // returns relevance-ordered IDs. We then apply the other filters and
+  // restore the ordering after Prisma returns the rows.
+  let searchOrderedIds: string[] | null = null;
   if (search) {
-    where.OR = [
-      { name: { contains: search, mode: "insensitive" } },
-      { sku: { contains: search, mode: "insensitive" } },
-      { partNumber: { contains: search, mode: "insensitive" } },
-      { brand: { contains: search, mode: "insensitive" } },
-    ];
+    const { searchProductIds } = await import("@/services/catalog/search");
+    const hits = await searchProductIds({ query: search, limit: 200 });
+    if (hits.length === 0) {
+      return {
+        products: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 1,
+      };
+    }
+    searchOrderedIds = hits.map((h) => h.productId);
+    where.id = { in: searchOrderedIds };
   }
 
   // ── Phase 0.7 filters ────────────────────────────────────────────
@@ -207,14 +219,27 @@ export async function listProducts(
     prisma.product.findMany({
       where,
       select: PRODUCT_SELECT,
-      orderBy: [{ brand: "asc" }, { name: "asc" }],
-      skip,
-      take: limit,
+      // When search is active, ordering by brand/name would scramble
+      // relevance — sort below in JS using the search-service ordering.
+      // Without search we keep the catalog default.
+      orderBy: searchOrderedIds ? undefined : [{ brand: "asc" }, { name: "asc" }],
+      skip: searchOrderedIds ? undefined : skip,
+      take: searchOrderedIds ? undefined : limit,
     }),
   ]);
 
+  let ordered = raws;
+  if (searchOrderedIds) {
+    const rank = new Map(searchOrderedIds.map((id, i) => [id, i]));
+    ordered = [...raws].sort(
+      (a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9),
+    );
+    // Apply pagination AFTER sorting by relevance.
+    ordered = ordered.slice(skip, skip + limit);
+  }
+
   return {
-    products: raws.map(enrichProduct),
+    products: ordered.map(enrichProduct),
     total,
     page,
     limit,
