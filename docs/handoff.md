@@ -1,9 +1,28 @@
 # Session handoff — IndustriParts v4.1 work
 
-**As of 10 May 2026 (end of session — Phases 0–5 + 4.5 all live in production; three Phase 4/5 follow-ups also landed).**
+**As of 10 May 2026 (end of session).**
+Phases 0–5 + 4.5 live in production. Five Phase 4 / 4.5 / 5 follow-ups
+also landed this session: `VIPPS_DISABLE_CAPTURE` kill-switch, Sentry
+alert wiring for failed BullMQ jobs, search autocomplete dropdown,
+BullMQ-cron migration (new `maintenance` queue), and automatic
+daily backup at 02:00 UTC to Supabase Storage.
+
 This page captures the live state of the v4.1 upgrade work so a new
 developer (or a fresh Claude Code session) can pick it up without
 reading the full chat transcript.
+
+## Last session's deltas (skim this first)
+
+Five focused follow-ups landed on top of the Phases 0–5+4.5 base:
+
+| Commit | What |
+|---|---|
+| `c9e6b9c` | `VIPPS_DISABLE_CAPTURE` kill-switch · Sentry pipe for terminal job failures · search autocomplete dropdown |
+| `0ac27b0` | New `maintenance` BullMQ queue; `expire-reservations` runs every minute via `upsertJobScheduler`. Retires the Railway curl cron once verified. |
+| `2a04cf1` | Daily backup at 02:00 UTC → Supabase Storage. New `BackupRun` model. `BackupWidget` rewritten to read from BackupRun (not Profile.lastBackupAt). |
+
+There are now **two backup paths** running in parallel — see the
+"Backup architecture" section below.
 
 For deep context read these in order:
 1. **This file** — current state, decisions, what's next.
@@ -14,28 +33,30 @@ For deep context read these in order:
 
 ## Where the code is
 
-`main` HEAD: `d468bf1 feat(phase-4.5): local-disk backup MVP — age-encrypted SQL dump`.
+`main` HEAD: `2a04cf1 feat(daily-backup): automatic age-encrypted backup at 02:00 UTC to Supabase Storage`.
 Production Railway tracks `main` and is live with everything below.
 
-Branch stack on origin (newest on top — each branched off its predecessor):
+Recent commits on `main`:
 
-| Branch | Tip commit | Phase |
-|--------|-----------|-------|
-| `phase-4.5-backup-mvp` | `d468bf1` | 4.5 |
-| `phase-5-search` | `1412867` | 5 + proxy fix |
-| `phase-4-job-queue` | `0877fe2` | 4 |
-| `phase-3-vipps-capture-stock-reservations` | `fe6447b` | 3 |
-| `phase-2-money-correctness` | `5af16ff` | 2 |
-| `phase-0-7-condition-provenance-filters` | `8ea6009` | 0.7 |
-| `phase-0-6-dynamic-categories` | `4874c88` | 0.6 |
-| `phase-0-5-storefront-chrome` | `beec854` | 0.5 |
-| `phase-1-foundations` | `f9bb613` | 1 |
-| `phase-0-triage` | `af44e3d` | 0 |
-| `main` | `d468bf1` | (head of the train) |
+```
+2a04cf1 feat(daily-backup): automatic age-encrypted backup at 02:00 UTC to Supabase Storage
+0ac27b0 feat(maintenance-queue): BullMQ-cron migration -- expire-reservations every minute
+c9e6b9c chore(follow-ups): VIPPS_DISABLE_CAPTURE + Sentry job alerts + search autocomplete
+d468bf1 feat(phase-4.5): local-disk backup MVP -- age-encrypted SQL dump
+1412867 fix(proxy): exclude /api from next-intl matcher
+b84a79e feat(phase-5): pg_trgm + FTS search -- three-stage relevance cascade
+406f86c fix(phase-2/4): unbreak prod build -- decimal.js direct, not via Prisma
+0877fe2 feat(phase-4): bullmq job queue v1 -- co-host model
+fe6447b feat(phase-3): Vipps capture-on-dispatch + StockReservation
+5af16ff feat(phase-2): money correctness -- Decimal end-to-end
+```
 
-GitHub Flow: each new phase branches off the previous WIP branch, not
-`main`. The full chain has been merged into `main` via fast-forward; the
-phase branches remain on origin as historical references.
+Phase branches remain on origin as historical references (`phase-0-triage`
+through `phase-4.5-backup-mvp`). The most recent three commits above
+landed directly on `main` since they were small, independent follow-ups
+rather than a full phase.
+
+GitHub Flow: feature branches off `main`, fast-forward merge back.
 
 ## Phase status
 
@@ -48,9 +69,9 @@ phase branches remain on origin as historical references.
 | 1 Foundations | ✅ Live | Vitest, Playwright, CI workflow, WebhookEvent |
 | 2 Money correctness (Decimal) | ✅ Live | `Money` brand on `decimal.js`; pricing rejects raw `number`; cart strings across the wire; Vipps webhook + MVA tax CSV use Decimal sums. **Note:** `decimal.js` imported direct, not via `Prisma.Decimal` — see "Build gotcha" below. |
 | 3 Vipps capture-on-dispatch + Stock reservations | ✅ Live | §38 compliance gap closed. `StockReservation` table; race fence at checkout. Webhook split (handleAuthorized/handleCaptured/handleVoided). `captureSaleOnDispatch` is the dispatch entry point, wired into both admin "Mark shipped" and the MyBring label route. |
-| 4 Job queue (BullMQ) v1 | ✅ Live | Co-host model. `notifications` queue (5 job types) + `enrichment` queue. Workers boot via `src/instrumentation.ts`. **Requires `REDIS_URL`** — set on Railway + local `.env`. |
-| 4.5 Local-disk backup MVP | ✅ Live | SUPER_ADMIN-only. age-encrypted SQL dump streaming through `/api/admin/backup/download`; setup at `/admin/backup/setup` generates keypair in-browser. `BackupWidget` on `/admin`. Restore runbook at `docs/restore-runbook.md`. |
-| 5 Search (pg_trgm + FTS) | ✅ Live | `Product.searchKey` + `Product.searchVector` columns + trigger; three-stage cascade (exact → trigram → FTS) in `src/services/catalog/search.ts`; `/api/search` autocomplete. |
+| 4 Job queue (BullMQ) v1 | ✅ Live | Co-host model. `notifications` + `enrichment` + `maintenance` queues. Workers boot via `src/instrumentation.ts`. Sentry pipe wires terminal failures to alerts (`reportJobFailure`). **Requires `REDIS_URL`** — set on Railway + local `.env`. |
+| 4.5 Backup (local + automatic) | ✅ Live | Two paths in parallel — see "Backup architecture" below. Manual MVP streams to browser; automatic daily job uploads age-encrypted artifact to Supabase Storage. `BackupRun` audit table tracks every run. |
+| 5 Search (pg_trgm + FTS) | ✅ Live | `Product.searchKey` + `Product.searchVector` columns + trigger; three-stage cascade (exact → trigram → FTS) in `src/services/catalog/search.ts`. Storefront autocomplete dropdown wired to `/api/search`. |
 | 6 Hardening (CSP / MFA / RLS) | ⏳ Not started | One open decision (MFA grace period) — default 7 days |
 | 7 Returns + Quotes + A11y + SAF-T | ⏳ Not started | |
 | 8 B2B richness | ⏳ Not started | |
@@ -58,9 +79,9 @@ phase branches remain on origin as historical references.
 
 ## Verified locally as of last commit
 
-- `npm test` — **80/80** passing across 10 test files (kid, brreg, slugify, pricing, reservations, notifications-dispatch, enrichment-dispatch, maintenance-dispatch (now incl. daily-backup), search, age round-trip)
+- `npm test` — **80/80** passing across 10 test files (kid, brreg, slugify, pricing, reservations, notifications-dispatch, enrichment-dispatch, maintenance-dispatch (incl. daily-backup), search, age round-trip)
 - `npm run typecheck` — clean (zero errors)
-- `npm run audit:links` — 41 pages, 18 APIs, **0 broken**, 2 known stub references (`/kampanjer`, `/info/finn-lager`)
+- `npm run audit:links` — **42 pages, 21 APIs, 0 broken**, 2 known stub references (`/kampanjer`, `/info/finn-lager`)
 - Production smoke tests (HTTP):
   - `/`, `/produkter`, `/info/deletyper` → 200
   - `/api/search?q=ab` → 200 with JSON
@@ -102,14 +123,30 @@ is fully wired and ready for first product import.
 REDIS_URL=rediss://default:gQAAAAAAAamjAAIgcDI2ZDE4ZjUxZmFjY...@driven-gull-108963.upstash.io:6379
 
 # Phase 4 — Cron sweep auth for /api/jobs/expire-reservations.
-# Until BullMQ-cron migration retires the curl cron service.
+# Now used only for the manual escape hatch (the BullMQ-cron migration
+# made the curl-cron service redundant for scheduling — see operational
+# follow-up below).
 CRON_SECRET=<set on Railway>
+
+# Daily-backup follow-up: existing service-role key, used by the new
+# src/lib/supabase/admin.ts to upload encrypted artifacts to the
+# Storage bucket. Was already set for other reasons; no change needed.
+SUPABASE_SERVICE_ROLE_KEY=<set on Railway>
+
+# Phase 4 follow-up — kill-switch for the Vipps capture-on-dispatch
+# path. Set to "1" or "true" to skip Vipps capture during an outage.
+# Default (unset / "0") is normal capture-on-dispatch behavior.
+# NOT currently set anywhere — flip on Railway only during a Vipps
+# outage. Read at call time; no redeploy required.
+VIPPS_DISABLE_CAPTURE=
 ```
 
-Both set on Railway production env. Local `.env` mirrors them for dev.
-**Note:** when `REDIS_URL` is missing the queue subsystem warns loudly
-at boot and `enqueueNotification` / `enqueueEnrichment` calls throw —
-that loud failure is intentional, not a bug.
+All set on Railway production env (except `VIPPS_DISABLE_CAPTURE`,
+which exists only as a code path; flip it on when needed). Local
+`.env` mirrors them for dev. **Note:** when `REDIS_URL` is missing the
+queue subsystem warns loudly at boot and `enqueueNotification` /
+`enqueueEnrichment` calls throw — that loud failure is intentional,
+not a bug.
 
 ## Build gotcha — decimal.js, not Prisma.Decimal, in shared modules
 
@@ -130,6 +167,44 @@ Server-only modules (`pricing.ts`, `cart.ts`, server actions, API
 routes) can keep using `Prisma.Decimal` — Prisma's runtime never reaches
 the client bundle from those.
 
+## Backup architecture — two paths in parallel
+
+Both paths produce the same `.sql.age` artifact (age-encrypted Postgres
+INSERT dump). Decrypt procedure is identical (`docs/restore-runbook.md`):
+both need the offline private key that was downloaded once during
+`/admin/backup/setup`.
+
+| Path | Trigger | Destination | Source of truth |
+|---|---|---|---|
+| **Manual** (`/api/admin/backup/download`) | SUPER_ADMIN clicks "Last ned" on `/admin` | Browser download → admin's laptop | Bumps `Profile.lastBackupAt` |
+| **Automatic** (`maintenance` queue `daily-backup` job) | `0 2 * * *` cron via `upsertJobScheduler` | Supabase Storage bucket `backups` at `YYYY/MM/DD/industriparts-{ISO}.sql.age` | New `BackupRun` row per attempt |
+
+The two are independent — disabling one doesn't break the other. The
+manual path is recommended weekly for "offsite" copies (Supabase = same
+vendor as the live DB, so Supabase-wide outage takes both copies down
+simultaneously).
+
+**Recipient selection (automatic):** the oldest SUPER_ADMIN with a
+`backupPublicKey` is the deterministic recipient. If none, the job
+records `BackupRunStatus.SKIPPED` and emits a warning — no exception.
+Multi-recipient encryption (so any admin can decrypt) stays an open
+follow-up; today's `lib/backup/age.ts` already supports it via
+`addRecipient`, but the scheduled job uses a single recipient.
+
+**Retention:** 30 days. After each successful run, `BackupRun` rows older
+than 30 days are pruned and the matching Storage artifacts deleted.
+Prune failures are non-fatal.
+
+**Bucket setup:** `backups` is auto-created on first run (idempotent
+`createBucket` call swallows the "already exists" error). No manual
+Supabase config required.
+
+**BackupWidget on `/admin`** reads from the latest `BackupRun(status=SUCCESS)`,
+not `Profile.lastBackupAt`. The latter ticks on *both* manual downloads
+and automatic runs, so it can lie about automatic backups working when
+only manual downloads have happened recently. Staleness threshold is
+2 days (was 7) since automatic backups should run daily.
+
 ## Latent bug also fixed mid-session — proxy.ts /api/* 404
 
 `src/proxy.ts` matcher was `/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)` —
@@ -144,7 +219,7 @@ no real Vipps traffic landed.
 - **B2B payment paths:** Vipps **or** invoice today. Bank transfer + credit card are future expansion. Phase 3 doesn't special-case them.
 - **Phase 2 historical-data policy:** moot — 0 sales when refactor landed. Pure pre-launch refactor.
 - **Phase 3 grandfathering:** skipped — 0 in-flight AUTHORIZED orders to migrate. Capture-on-dispatch is the only behavior from day one.
-- **Phase 3 feature flag:** plan's `VIPPS_CAPTURE_ON_DISPATCH` soak-window flag dropped (no live traffic to soak against). A simpler `VIPPS_DISABLE_CAPTURE` kill-switch is the recommended replacement — not yet implemented.
+- **Phase 3 feature flag:** plan's `VIPPS_CAPTURE_ON_DISPATCH` soak-window flag dropped (no live traffic to soak against). Replaced by the `VIPPS_DISABLE_CAPTURE` kill-switch — shipped this session. When set to `"1"` or `"true"`, `captureSaleOnDispatch` skips the Vipps capture API call but still decrements stock and releases reservations. Sale stays AUTHORIZED; admin reconciles capture via the Vipps portal post-outage. Env var is read at call time, so toggling on Railway takes effect on the next dispatch without redeploy.
 - **Decimal library:** use Prisma 7's bundled `decimal.js` directly instead of the plan's `decimal.js-light` (avoids dual-library bundle, matches what Prisma uses internally). On the client side, install `decimal.js` directly per the build-gotcha note above.
 - **Phase 4 worker hosting:** option A (co-host in main process) per the cost/operational tradeoff for current load. Migrate to a separate Railway service (option B) only on memory pressure or HTTP-latency regression — same codebase, just a different launcher.
 - **CSV `categoryPath` separator:** `/`.
@@ -165,47 +240,69 @@ no real Vipps traffic landed.
 
 (Most other plan decisions are now resolved as Phases 2/3/4/4.5/5 shipped. The MFA grace period is the only outstanding one.)
 
-## Open follow-ups not in any phase commit
+## Open follow-ups
 
-These are real work items that didn't make it into the phase that
-introduced them. Loose-coupled — pick any in any order.
+Real work items that didn't make it into the phase that introduced
+them. Loose-coupled — pick any in any order. Shipped follow-ups are
+listed in the next section for posterity.
 
-### Phase 4 follow-ups
-- **PDF queue split.** Invoice PDF rendering currently runs inside the `notifications:invoice-issued` job handler. Splitting it out lets us cap concurrency separately and add a polling endpoint for "is the invoice PDF ready yet?" UX.
-- ~~**BullMQ-cron migration.**~~ ✅ Shipped — new `maintenance` queue in `src/lib/queue/maintenance.ts`. `expire-reservations-cron` runs every minute via `upsertJobScheduler` (BullMQ 5+ API; idempotent so safe under multi-instance Railway). `/api/jobs/expire-reservations` retained as a manual escape hatch for ops. **Operational follow-up:** once the BullMQ schedule is verified in production (Railway logs show `[maintenance] expired reservations` ticks), the Railway `curl` cron service should be deleted to retire the redundant HTTP path. `CRON_SECRET` stays needed for the escape hatch.
-- **Invoice 202 + polling.** The plan calls for the invoice route to return 202 immediately and expose a status-poll endpoint. Today the route is synchronous; deferred until the PDF queue above is in place.
-- ~~**Sentry alert wiring** for failed jobs.~~ ✅ Shipped — `src/lib/sentry.ts` `reportJobFailure(queueName, job, err)` called from both queue workers' `failed` handlers. Only terminal failures (attempts exhausted) report so retries don't flood. Sentry is initialized lazily in `src/instrumentation.ts` when `SENTRY_DSN` is set.
-- ~~**`VIPPS_DISABLE_CAPTURE` kill-switch.**~~ ✅ Shipped — env var read at call time inside `captureSaleOnDispatch`. When `"1"` or `"true"`, skips the Vipps capture API call but still decrements stock and releases reservations. Sale stays AUTHORIZED — admin reconciles capture via the Vipps portal post-outage. `DispatchResult` gains an optional `captureSuppressed: true` flag.
+### Phase 4 follow-ups (open)
 
-### Phase 4.5 follow-ups
-- ~~**BullMQ repeating job at 02:00 UTC** for automatic daily backups.~~ ✅ Shipped — `daily-backup` job kind in the `maintenance` queue, scheduled `0 2 * * *`. `runScheduledBackup()` in `src/lib/backup/scheduled-backup.ts` picks the oldest SUPER_ADMIN with a `backupPublicKey`, streams `pg_dump → age-encrypt`, uploads to Supabase Storage at `backups/yyyy/mm/dd/industriparts-{ts}.sql.age`. Bumps `Profile.lastBackupAt` on every SUPER_ADMIN. 30-day retention with best-effort prune after each successful run. `SKIPPED` status when no admin has a key registered. Storage bucket is auto-created on first run.
-- ~~**`BackupRun` model.**~~ ✅ Shipped — `BackupRun(id, startedAt, finishedAt, status, recipientKey, storagePath, bytesWritten, errorMessage)` with `BackupRunStatus(RUNNING|SUCCESS|FAILED|SKIPPED)`. Migration `20260510220000_phase45_backup_run`.
-- **`/admin/sikkerhetskopier`** admin page listing past runs. Schema exists; UI not built yet. Read `BackupRun` ordered by `startedAt DESC` and render status + size + storagePath as a download link (need a signed-URL endpoint for that — Storage bucket is private).
-- **Multi-recipient age encryption** when there are multiple SUPER_ADMINs (so any of them can decrypt). Today's scheduled backup encrypts to one recipient — the oldest SUPER_ADMIN with a key. `encryptStream` in `lib/backup/age.ts` already supports `addRecipient` per recipient; the change is small once needed.
-- ~~**Email + dashboard banner** when `lastBackupAt` is stale.~~ ✅ Partial — `BackupWidget` now reads from the latest `BackupRun(status=SUCCESS)` instead of `Profile.lastBackupAt` (which lies about automatic backups because it ticks on every manual download). Staleness threshold tightened from 7 days to 2 days since automatic backups should run daily. Email alert still TODO.
+- **PDF queue split.** Invoice PDF rendering currently runs inside the `notifications:invoice-issued` job handler. Splitting it out lets us cap concurrency separately and add a polling endpoint for "is the invoice PDF ready yet?" UX. ~half day.
+- **Invoice 202 + polling.** Plan calls for the invoice route to return 202 immediately and expose a status-poll endpoint. Today it's synchronous; deferred until the PDF queue above is in place.
 
-### Phase 5 follow-ups
-- ~~**Storefront autocomplete dropdown.**~~ ✅ Shipped — `SearchBar` converted to a client component with 200 ms debounced fetch against `/api/search`. Keyboard navigation (↑/↓/Enter/Esc), mouse hover, outside-click close, route-change close. Form submit still GETs `/sok?q=…` as the no-JS / pre-hydration fallback.
-- **Search-result highlighting.** Currently just relevance-sorted; bolding matched tokens in the result name would be a UX polish.
-- **Trigram threshold tuning.** 0.4 is a reasonable default; observe real query patterns once products land and adjust as needed.
+### Phase 4.5 follow-ups (open)
 
-### Phase 3 follow-ups
-- **Refund flow.** Vipps `REFUNDED` webhook is currently logged-only; no Sale lifecycle update, no admin "Refund" UI. When refunds become operationally relevant, add `handleRefund` in the webhook + an admin action that calls `refundVippsPayment` and marks `Sale.status = REFUNDED`.
+- **`/admin/sikkerhetskopier`** admin page listing past `BackupRun` rows. Schema exists; UI not built yet. Read `BackupRun` ordered by `startedAt DESC` and render status + size + storagePath as a download link (need a signed-URL endpoint for that — Storage bucket is private). ~half day.
+- **Multi-recipient age encryption** when there are multiple SUPER_ADMINs (so any of them can decrypt). Today's scheduled backup encrypts to one recipient — the oldest SUPER_ADMIN with a key. `encryptStream` in `lib/backup/age.ts` already supports `addRecipient`; the call site change is small once needed. ~1 hour.
+- **Email alert on stale or failed backups.** `BackupWidget` shows the dashboard banner already, but a Resend email would page someone who isn't watching the dashboard. Hook it into the `daily-backup` handler when it records SKIPPED/FAILED, plus a separate "no SUCCESS in N days" check. ~half day.
+- **Offsite backup destination** (optional, defence in depth). Today the automatic copy lands in Supabase Storage — same vendor as the live DB. A weekly push to S3 / Backblaze in a different account would survive a Supabase-wide incident. Same `runScheduledBackup` pipeline, just an additional upload target. ~1 day if scope creeps; ~half day if pragmatic.
+
+### Phase 5 follow-ups (open)
+
+- **Search-result highlighting.** Bold matched tokens in the autocomplete dropdown + on the results page. ~1 hour.
+- **Trigram threshold tuning.** 0.4 is the current default; observe real query patterns once products land and adjust.
+
+### Phase 3 follow-ups (open)
+
+- **Refund flow.** Vipps `REFUNDED` webhook is currently logged-only; no Sale lifecycle update, no admin "Refund" UI. When refunds become operationally relevant, add `handleRefund` in the webhook + an admin action that calls `refundVippsPayment` and marks `Sale.status = REFUNDED`. ~half day.
 - **Parallel-checkout integration test.** Plan calls for "50 parallel checkouts on the last unit, zero overcommits." Needs real-DB infra (testcontainers or a Supabase preview branch). Deferred until that infra exists.
 
-### Phase 2 polish
-- **9 remaining display-side `.toNumber()` sites** in admin pages (`/admin/page.tsx`, `/admin/regnskap/page.tsx`, `/admin/mva-rapport/page.tsx`), `/betaling/bekreftelse`, `invoice-pdf.tsx`, `notification-service.ts`. None affect money correctness — formatters now accept Decimal so the redundant `.toNumber()` calls can be dropped.
+### Phase 2 polish (open)
 
-### Pre-Phase-5 small items
+- **9 remaining display-side `.toNumber()` sites** in admin pages (`/admin/page.tsx`, `/admin/regnskap/page.tsx`, `/admin/mva-rapport/page.tsx`), `/betaling/bekreftelse`, `invoice-pdf.tsx`, `notification-service.ts`. None affect money correctness — formatters now accept Decimal so the redundant `.toNumber()` calls can be dropped. ~1 hour.
+
+### Pre-Phase-5 small items (open)
+
 - **Edit-product editable form** at `/admin/produkter/[sku]/rediger` — read-only display today; CategoryPicker + condition/provenance + provenance fields need wiring.
 - **Drag-to-reorder** in `/admin/kategorier`. Server action `reorderCategoriesAction` exists; UI is static order.
 - **Brand chip-row tidy-up** on `/produkter` — text `brand` field still rendered separately from the Phase 0.7 `MachineMake` filter chips.
+
+### Operational items (manual, no code)
+
+- **Retire the Railway `curl` cron service.** The BullMQ `maintenance` queue now schedules `expire-reservations` every minute (verified in CI; pending verification in production logs). Once Railway logs show `[maintenance] expired reservations` ticks consistently for ~24 hours, delete the `curl` cron service from the Railway project. `/api/jobs/expire-reservations` stays as a manual escape hatch; `CRON_SECRET` stays needed for it.
+- **Verify the daily backup runs at 02:00 UTC.** First run will be the morning after deploy. Expected outcomes: `SUCCESS` row in `BackupRun` if a SUPER_ADMIN has registered an age public key via `/admin/backup/setup`; otherwise `SKIPPED`. Check `/admin` dashboard — `BackupWidget` should reflect "Siste automatiske kjøring: for 0 dager siden (X KB)".
+- **Pull a manual backup every now and then.** Click "Last ned sikkerhetskopi" on `/admin` weekly and stash the resulting `.sql.age` file somewhere durable (external drive, cloud sync, etc.). The Supabase Storage copy is automatic but co-located with the live DB; a manual local copy is your true offsite backup.
+
+## Shipped follow-ups (for posterity)
+
+For context on what's already been done if you're re-reading old plan
+sections that referenced "todo: …":
+
+- ✅ **BullMQ-cron migration** — `maintenance` queue + `expire-reservations-cron`. (`0ac27b0`)
+- ✅ **Sentry alert wiring for failed BullMQ jobs** — `src/lib/sentry.ts` + worker `failed` handlers. (`c9e6b9c`)
+- ✅ **`VIPPS_DISABLE_CAPTURE` kill-switch** — env var inside `captureSaleOnDispatch`. (`c9e6b9c`)
+- ✅ **Daily-backup at 02:00 UTC → Supabase Storage** — `runScheduledBackup` + `BackupRun` model + retention. (`2a04cf1`)
+- ✅ **`BackupRun` model** — audit trail for every scheduled and manual backup. (`2a04cf1`)
+- ✅ **BackupWidget rewritten** to read latest `BackupRun(SUCCESS)` instead of `Profile.lastBackupAt`. (`2a04cf1`)
+- ✅ **Storefront autocomplete dropdown** — `SearchBar` debounced fetch to `/api/search` + keyboard nav. (`c9e6b9c`)
 
 ## Infra state
 
 - **Repo:** GitHub `Dyvikamaskin/Dyvikamaskin-Webshop`. `gh` CLI authenticated as VenturaAI1.
 - **Supabase project:** `nxqqmplptalbxmfmbtfs` (Dyvikamaskin Webshop, EU West, ACTIVE_HEALTHY). Modern secret key was rotated 10 May 2026 — `rotation_2026_05` (id `1d5b66a5…`); old `default` deleted. Railway env `SUPABASE_SERVICE_ROLE_KEY` holds the new value.
-- **Railway:** Project `dyvikamaskin-webshop` (id `3876e777-…`). One service `Dyvikamaskin-Webshop` plus a `curl` cron service. Single environment `production`. PR Environments not enabled (paid feature). `railway` CLI authenticated as `admindyvikamaskin@bojoind.com`.
+- **Supabase Storage:** bucket `backups` is auto-created on the first daily-backup run (private, idempotent `createBucket`). Currently empty until the first 02:00 UTC tick executes successfully.
+- **Railway:** Project `dyvikamaskin-webshop` (id `3876e777-…`). One service `Dyvikamaskin-Webshop` plus a `curl` cron service (the curl-cron is now **redundant** — BullMQ schedules expire-reservations directly; delete after verifying production logs show the BullMQ ticks; see operational follow-ups). Single environment `production`. PR Environments not enabled (paid feature). `railway` CLI authenticated as `admindyvikamaskin@bojoind.com`.
 - **Supabase Branching:** Persistent staging branches require Pro plan ($25/mo). Free tier offers per-PR preview branches only via the paid GitHub Integration. Decision: defer Supabase staging until Phase 6 needs it for safe RLS testing.
 - **Sentry:** wired (org `dyvika-maskin`, project `javascript-nextjs`). DSN in env vars.
 - **Upstash Redis:** wired and active. Used by rate limiter via REST creds; BullMQ uses TCP via `REDIS_URL`. Same database, different protocol.
@@ -232,9 +329,17 @@ The project memory file at `~/.claude/projects/C--Users-Ventura-AI/memory/projec
 
 ## What to start on next
 
-1. **Add a real product** (manual create or CSV import) and verify the full money flow end-to-end: cart → checkout → reserve → AUTHORIZED → mark shipped → CAPTURED → invoice. With 0 sales today, none of the new payment-path code has been exercised against live data; the unit tests cover the math but a real-product walkthrough is the missing acceptance gate.
-2. **Phase 6 — Hardening** (CSP / admin MFA / RLS as defence-in-depth). Confirms the MFA grace period (default 7 days), then ships. 3–4 dev-days. The most operationally valuable phase remaining.
-3. **Phase 7 — Returns + Quotes + A11y + SAF-T** (compliance bundle). 4–5 days.
-4. **Pick off the open follow-ups** as appetite allows. The Phase 4 follow-ups (BullMQ-cron + PDF queue split + Sentry alert wiring) are smallest and operationally useful.
+In recommended order:
+
+1. **Verify the new automatic backup actually ran.** First 02:00 UTC tick after the latest deploy is the moment of truth. Check `/admin` — `BackupWidget` should say "Siste automatiske kjøring: for 0 dager siden (X KB)". If it still says `SKIPPED`, the operator hasn't completed `/admin/backup/setup`; do that.
+2. **Retire the Railway curl cron service.** Wait until production logs show `[maintenance] expired reservations` ticks for ~24 hours, then delete the curl service from Railway. Operational hygiene; no code work.
+3. **Add a real product** (manual create or CSV import) and walk a full money flow end-to-end: cart → checkout → reserve → AUTHORIZED → mark shipped → CAPTURED → invoice. With 0 sales today, none of the new payment-path code has been exercised against live data; the unit tests cover the math but a real-product walkthrough is the missing acceptance gate.
+4. **Phase 6 — Hardening** (CSP / admin MFA / RLS as defence-in-depth). One open decision: MFA grace period (default 7 days). 3–4 dev-days. The most operationally valuable phase remaining.
+5. **Phase 7 — Returns + Quotes + A11y + SAF-T** (compliance bundle). 4–5 dev-days.
 
 Or, if you want to push features rather than infra: **content + product import.** The catalog scaffolding (categories, machine fitments) is in place; loading actual products is what unlocks the storefront for real customers.
+
+**Smaller items if you have an hour:** any of the open follow-ups
+above. The Phase 2 `.toNumber()` cleanup is ~1 hour and purely
+cosmetic. The `/admin/sikkerhetskopier` admin page is ~half day and
+becomes useful as `BackupRun` rows accumulate.
