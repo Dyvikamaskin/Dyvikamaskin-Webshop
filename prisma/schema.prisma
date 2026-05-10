@@ -167,6 +167,12 @@ model Profile {
   isApprovedForInvoice Boolean      @default(false)
   isActive             Boolean      @default(true)
   preferredLanguage    String       @default("nb")
+  // ─── Phase 4.5 backup MVP ────────────────────────────────────────────────
+  // age public key (X25519, "age1…"). Set during /admin/backup/setup; the
+  // matching private key is downloaded once and never persisted.
+  backupPublicKey      String?
+  // Timestamp of the most recent successful backup download.
+  lastBackupAt         DateTime?
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { UserRole, OrderStatus, FulfillmentStatus } from "@/app/generated/prisma/enums";
+import { BackupWidget } from "@/components/admin/BackupWidget";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Oversikt — Admin" };
@@ -132,6 +133,8 @@ export default async function AdminDashboardPage() {
       >
         Oversikt
       </h1>
+
+      <BackupWidget />
 
       {/* ── Stat cards — operations ─────────────────────────────────────────── */}
       <h2 style={sectionTitle}>Operasjon</h2>
