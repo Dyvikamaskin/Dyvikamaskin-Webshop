@@ -3,6 +3,26 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { UserRole } from "@/app/generated/prisma/client";
 
+// ─── Phase 6 — MFA enforcement gate ────────────────────────────────────────
+// Two-phase rollout per the handoff:
+//   * MFA_ENFORCEMENT_ENABLED unset / "false" / "0" → code path active but
+//     no enforcement. Admins can enroll TOTP at /konto/mfa/setup whenever.
+//   * MFA_ENFORCEMENT_ENABLED = "true" → STORE_MANAGER+ requireRole() calls
+//     reject sessions without aal:'aal2' and redirect to /konto/mfa/setup.
+// The check is at request time, so flipping the env var on Railway takes
+// effect on the next request without redeploy.
+function mfaEnforcementEnabled(): boolean {
+  return process.env.MFA_ENFORCEMENT_ENABLED === "true";
+}
+
+// Roles that must use MFA when enforcement is enabled. Customers and
+// FULFILLMENT_STAFF stay on password-only — MFA is for STORE_MANAGER+
+// who can modify pricing, inventory, and order state.
+const MFA_REQUIRED_FOR: ReadonlySet<UserRole> = new Set([
+  UserRole.STORE_MANAGER,
+  UserRole.SUPER_ADMIN,
+]);
+
 // ─── Role hierarchy ───────────────────────────────────────────────────────────
 // null (customer) < FULFILLMENT_STAFF < STORE_MANAGER < SUPER_ADMIN
 const ROLE_RANK: Record<UserRole, number> = {
@@ -76,6 +96,20 @@ export async function requireRole(minimumRole: UserRole) {
     (ROLE_RANK[profile.role] ?? 0) < ROLE_RANK[minimumRole]
   ) {
     redirect("/unauthorized");
+  }
+
+  // Phase 6 — MFA gate. Skipped when MFA_ENFORCEMENT_ENABLED is not "true";
+  // skipped when the requested role is below STORE_MANAGER (e.g. FULFILLMENT_STAFF
+  // pickup-station accounts that don't need TOTP).
+  if (mfaEnforcementEnabled() && MFA_REQUIRED_FOR.has(minimumRole)) {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    // On error (Supabase outage), fail-closed for admin routes: better
+    // to lock out admins for a few seconds than to let a downgraded
+    // session through. Customer/staff routes are unaffected.
+    if (error || data?.currentLevel !== "aal2") {
+      redirect("/konto/mfa/setup");
+    }
   }
 
   return profile;

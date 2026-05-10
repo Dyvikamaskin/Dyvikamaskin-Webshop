@@ -1,12 +1,14 @@
 "use server";
 
 import { randomUUID } from "crypto";
+import { headers } from "next/headers";
 import { Prisma } from "@/app/generated/prisma/client";
 import { validateCart } from "@/lib/cart";
 import { createVippsPayment, toOre } from "@/lib/vipps";
 import { determineBatchSlot } from "@/lib/batch";
 import { getAuthUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { consumeCheckoutAttempt } from "@/lib/ratelimit";
 import {
   reserveStock,
   attachReservationsToSale,
@@ -46,8 +48,23 @@ export async function initiateCheckoutAction(
       return { ok: false, error: "Handlekurven er tom." };
     }
 
-    // 1. Resolve customer profile
+    // 0. Rate-limit (Phase 6). Authenticated users keyed by profile id;
+    //    anonymous shoppers fall back to IP. 5 checkout attempts per 60s
+    //    is well above legitimate user behaviour but stops a bot from
+    //    triggering many parallel Vipps payment requests.
     const authUser = await getAuthUser();
+    const limitKey = authUser?.id
+      ? `profile:${authUser.id}`
+      : `ip:${await getClientIp()}`;
+    const gate = await consumeCheckoutAttempt(limitKey);
+    if (!gate.ok) {
+      return {
+        ok: false,
+        error: `For mange kasse-forsøk. Vent ${gate.retryAfterSeconds} sekund(er) og prøv igjen.`,
+      };
+    }
+
+    // 1. Resolve customer profile
     let customerProfile:
       | {
           customerId: string;
@@ -199,4 +216,16 @@ export async function initiateCheckoutAction(
       error: "Det oppstod en feil ved oppstart av betaling. Prøv igjen.",
     };
   }
+}
+
+/**
+ * Best-effort client IP for the per-account checkout rate-limit when the
+ * caller isn't authenticated. Falls back to a static "unknown" key so we
+ * still rate-limit (overall, not per-IP) when headers are missing.
+ */
+async function getClientIp(): Promise<string> {
+  const h = await headers();
+  const xff = h.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0].trim();
+  return h.get("x-real-ip") ?? "unknown";
 }

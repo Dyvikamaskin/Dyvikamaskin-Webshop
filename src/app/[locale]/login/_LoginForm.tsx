@@ -1,22 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-
-// ─── Norwegian error messages ─────────────────────────────────────────────────
-
-function translateError(msg: string): string {
-  const m = msg.toLowerCase();
-  if (m.includes("invalid login credentials") || m.includes("invalid credentials"))
-    return "Feil e-post eller passord.";
-  if (m.includes("email not confirmed"))
-    return "Du må bekrefte e-postadressen din. Sjekk innboksen din.";
-  if (m.includes("too many requests"))
-    return "For mange forsøk. Vent litt og prøv igjen.";
-  if (m.includes("user not found"))
-    return "Ingen konto med denne e-postadressen.";
-  return "Innlogging feilet. Prøv igjen.";
-}
+import { loginAction } from "@/app/actions/auth";
 
 // ─── Shared input style ───────────────────────────────────────────────────────
 
@@ -53,14 +38,11 @@ export default function LoginForm({ next }: { next?: string }) {
     setLoading(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error: sbError } = await supabase.auth.signInWithPassword({
-      email:    email.trim(),
-      password,
-    });
+    // Server action handles rate-limit + signInWithPassword + cookie set.
+    const result = await loginAction(email, password);
 
-    if (sbError) {
-      setError(translateError(sbError.message));
+    if (!result.ok) {
+      setError(result.error);
       setLoading(false);
       return;
     }
