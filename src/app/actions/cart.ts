@@ -24,6 +24,7 @@ export interface ItemPricingResult {
 }
 
 type CustomerProfile = {
+  customerId: string;
   customerType: CustomerType;
   defaultDiscount: Prisma.Decimal | string;
 };
@@ -40,12 +41,13 @@ async function resolveCustomerProfile(): Promise<CustomerProfile | undefined> {
 
   const profile = await prisma.profile.findUnique({
     where: { id: user.id },
-    select: { customerType: true, defaultDiscount: true },
+    select: { id: true, customerType: true, defaultDiscount: true },
   });
 
   if (!profile) return undefined;
 
   return {
+    customerId: profile.id,
     customerType: profile.customerType as CustomerType,
     defaultDiscount: profile.defaultDiscount,
   };

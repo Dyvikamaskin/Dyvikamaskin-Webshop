@@ -66,6 +66,9 @@ export interface ValidatedCart {
 }
 
 interface CustomerProfile {
+  /** Profile.id — required for Phase 8 CustomerPriceList lookup.
+   *  Optional for back-compat; when null the engine skips tier lookups. */
+  customerId?: string;
   customerType: CustomerType;
   defaultDiscount: Prisma.Decimal | string;
 }
@@ -165,6 +168,20 @@ export async function validateCart(
     customerType,
   );
 
+  // 2b. Phase 8 — load this customer's pricing tier rules.
+  // Empty array for anon shoppers (no profile).
+  const customerPriceList = profile?.customerId
+    ? await prisma.customerPriceList.findMany({
+        where: { profileId: profile.customerId },
+        select: {
+          scope: true,
+          scopeId: true,
+          discountPercent: true,
+          fixedPrice: true,
+        },
+      })
+    : [];
+
   // 3. Build validated items
   const validatedItems: ValidatedCartItem[] = [];
 
@@ -190,6 +207,7 @@ export async function validateCart(
       brand: product.brand,
       customerType,
       customerDefaultDiscount: profile?.defaultDiscount,
+      customerPriceList,
       activePromotions,
     });
 
@@ -350,6 +368,19 @@ export async function getSingleItemPricing(
     customerType,
   );
 
+  // Phase 8 — per-customer pricing tier rules
+  const customerPriceList = profile?.customerId
+    ? await prisma.customerPriceList.findMany({
+        where: { profileId: profile.customerId },
+        select: {
+          scope: true,
+          scopeId: true,
+          discountPercent: true,
+          fixedPrice: true,
+        },
+      })
+    : [];
+
   const priced = calculatePrice({
     priceBase: product.priceBase,
     mvaRate: product.mvaRate,
@@ -359,6 +390,7 @@ export async function getSingleItemPricing(
     brand: product.brand,
     customerType,
     customerDefaultDiscount: profile?.defaultDiscount,
+    customerPriceList,
     activePromotions,
   });
 

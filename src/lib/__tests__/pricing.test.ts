@@ -241,3 +241,116 @@ describe("calculatePrice — unknown product safety", () => {
     expect(result.priceEx.toString()).toBe("850");
   });
 });
+
+// ─── Phase 8 — CustomerPriceList integration ─────────────────────────────────
+
+describe("calculatePrice — CustomerPriceList (Phase 8)", () => {
+  it("applies a GLOBAL percent discount above the customerDefaultDiscount", async () => {
+    const { CustomerPriceScope } = await import("@/app/generated/prisma/enums");
+    const result = calculatePrice(
+      input({
+        customerType: CustomerType.BUSINESS,
+        customerDefaultDiscount: new D("5"),
+        customerPriceList: [
+          { scope: CustomerPriceScope.GLOBAL, discountPercent: new D("15") },
+        ],
+      }),
+    );
+    // Tier 15% beats default 5%
+    expect(result.discountPct.toString()).toBe("15");
+    expect(result.discountSource).toBe(DiscountSource.CUSTOMER_DISCOUNT);
+    expect(result.priceEx.toString()).toBe("850");
+  });
+
+  it("picks the highest applicable tier across multiple matches (highest wins)", async () => {
+    const { CustomerPriceScope } = await import("@/app/generated/prisma/enums");
+    const result = calculatePrice(
+      input({
+        categoryId: "cat-tools",
+        brand: "Bosch",
+        customerType: CustomerType.BUSINESS,
+        customerPriceList: [
+          { scope: CustomerPriceScope.GLOBAL,   discountPercent: new D("5") },
+          { scope: CustomerPriceScope.CATEGORY, scopeId: "cat-tools", discountPercent: new D("12") },
+          { scope: CustomerPriceScope.BRAND,    scopeId: "Bosch",     discountPercent: new D("18") },
+        ],
+      }),
+    );
+    expect(result.discountPct.toString()).toBe("18");
+    expect(result.priceEx.toString()).toBe("820");
+  });
+
+  it("PRODUCT-scope fixedPrice overrides priceBaseEx and zeros out percent", async () => {
+    const { CustomerPriceScope } = await import("@/app/generated/prisma/enums");
+    const result = calculatePrice(
+      input({
+        priceBase: new D("1000"),
+        customerType: CustomerType.BUSINESS,
+        customerDefaultDiscount: new D("20"),
+        customerPriceList: [
+          { scope: CustomerPriceScope.PRODUCT, scopeId: "prod-1", fixedPrice: new D("650") },
+        ],
+      }),
+    );
+    // Customer's contracted fixed price wins: priceBaseEx = priceEx = 650
+    expect(result.priceBaseEx.toString()).toBe("650");
+    expect(result.priceEx.toString()).toBe("650");
+    expect(result.discountPct.toString()).toBe("0");
+    // mva = 25% of 650 = 162.50
+    expect(result.mvaAmount.toString()).toBe("162.5");
+  });
+
+  it("ignores fixedPrice at non-PRODUCT scope", async () => {
+    const { CustomerPriceScope } = await import("@/app/generated/prisma/enums");
+    const result = calculatePrice(
+      input({
+        priceBase: new D("1000"),
+        categoryId: "cat-x",
+        customerType: CustomerType.BUSINESS,
+        customerPriceList: [
+          // Malformed config: fixedPrice at CATEGORY scope. Engine ignores it.
+          { scope: CustomerPriceScope.CATEGORY, scopeId: "cat-x", fixedPrice: new D("400") },
+        ],
+      }),
+    );
+    expect(result.priceBaseEx.toString()).toBe("1000");
+    expect(result.priceEx.toString()).toBe("1000");
+  });
+
+  it("falls through cleanly when no CustomerPriceList entries match", async () => {
+    const { CustomerPriceScope } = await import("@/app/generated/prisma/enums");
+    const result = calculatePrice(
+      input({
+        customerPriceList: [
+          { scope: CustomerPriceScope.PRODUCT, scopeId: "different-product", discountPercent: new D("30") },
+          { scope: CustomerPriceScope.BRAND, scopeId: "OtherBrand", discountPercent: new D("25") },
+        ],
+      }),
+    );
+    expect(result.discountSource).toBe(DiscountSource.NONE);
+    expect(result.priceEx.toString()).toBe("1000");
+  });
+
+  it("promotion can still beat a CustomerPriceList percent (highest wins)", async () => {
+    const { CustomerPriceScope } = await import("@/app/generated/prisma/enums");
+    const promo: ActivePromotion = {
+      id: "p-big",
+      discountType: DiscountType.PERCENTAGE,
+      discountValue: new D("25"),
+      targetType: PromotionTargetType.PRODUCT,
+      targetId: "prod-1",
+      appliesToCustomerType: PromotionAudience.BOTH,
+    };
+    const result = calculatePrice(
+      input({
+        customerType: CustomerType.BUSINESS,
+        customerPriceList: [
+          { scope: CustomerPriceScope.GLOBAL, discountPercent: new D("18") },
+        ],
+        activePromotions: [promo],
+      }),
+    );
+    expect(result.discountPct.toString()).toBe("25");
+    expect(result.discountSource).toBe(DiscountSource.PROMOTION);
+  });
+});

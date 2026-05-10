@@ -128,8 +128,33 @@ export function CartContent() {
   const grandMva =
     validated?.grandMvaAmount ?? fallbackInc.minus(fallbackEx).toString();
 
+  // Phase 8 — backorder warning. Any item without immediate stock at the
+  // assigned store triggers the banner, since the order will dispatch when
+  // the upstream restocks.
+  const hasBackorder = (validated?.items ?? []).some(
+    (i) => i.stockWarning,
+  );
+
   return (
     <div>
+      {/* Phase 8 — backorder banner */}
+      {hasBackorder && (
+        <div
+          style={{
+            background: "#dbeafe",
+            border: "1px solid #93c5fd",
+            borderRadius: "0.5rem",
+            padding: "0.75rem 1rem",
+            marginBottom: "1.25rem",
+            fontSize: "0.875rem",
+            color: "#1e3a8a",
+          }}
+        >
+          ⓘ Én eller flere varer er på restordre. Vi sender ordren når
+          alle varene er tilgjengelige.
+        </div>
+      )}
+
       {/* Multi-store warning */}
       {validated?.isMultiStore && (
         <div

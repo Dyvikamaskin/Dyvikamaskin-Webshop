@@ -21,6 +21,7 @@ import {
   DiscountType,
   PromotionAudience,
   CustomerType,
+  CustomerPriceScope,
   PromotionTargetType,
 } from "@/app/generated/prisma/enums";
 
@@ -72,6 +73,18 @@ export interface ActivePromotion {
   appliesToCustomerType: PromotionAudience;
 }
 
+/**
+ * One row from Profile's CustomerPriceList. Either discountPercent
+ * (0-100) or fixedPrice (NOK ex-MVA per unit) is set — never both.
+ * The pricing engine rejects rows that violate that invariant.
+ */
+export interface CustomerPriceListEntry {
+  scope: CustomerPriceScope;
+  scopeId?: string | null;
+  discountPercent?: MoneyInput | null;
+  fixedPrice?: MoneyInput | null;
+}
+
 export interface PriceInput {
   priceBase: MoneyInput;
   mvaRate: MoneyInput;
@@ -82,6 +95,9 @@ export interface PriceInput {
   customerType: CustomerType;
   /** Percentage as a decimal where 10 = 10 %. Defaults to 0. */
   customerDefaultDiscount?: MoneyInput;
+  /** Per-customer pricing tiers (Phase 8). Empty / undefined = no
+   *  tiers and the engine falls back to customerDefaultDiscount alone. */
+  customerPriceList?: CustomerPriceListEntry[];
   activePromotions?: ActivePromotion[];
 }
 
@@ -138,6 +154,81 @@ function promotionMatchesProduct(
   }
 }
 
+/**
+ * Phase 8 — match a CustomerPriceList entry against the current
+ * product context. GLOBAL always matches; PRODUCT matches on id OR sku
+ * (same as promotions); CATEGORY matches categoryId; BRAND matches the
+ * free-text brand string.
+ */
+function customerPriceMatches(
+  entry: CustomerPriceListEntry,
+  productId: string,
+  sku: string,
+  categoryId: string | null | undefined,
+  brand: string | null | undefined,
+): boolean {
+  switch (entry.scope) {
+    case CustomerPriceScope.GLOBAL:
+      return true;
+    case CustomerPriceScope.PRODUCT:
+      return entry.scopeId === productId || entry.scopeId === sku;
+    case CustomerPriceScope.CATEGORY:
+      return categoryId != null && entry.scopeId === categoryId;
+    case CustomerPriceScope.BRAND:
+      return brand != null && entry.scopeId === brand;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Phase 8 — Resolve the best CustomerPriceList outcome for this product
+ * context. Returns:
+ *   * fixedPrice (Money) — overrides priceBaseEx entirely; subsequent
+ *     percent discounts are skipped. Only PRODUCT-scope entries with
+ *     fixedPrice are honored (broader-scope fixed prices are
+ *     conceptually weird; we ignore them silently).
+ *   * percent (Money) — the highest discountPercent across all matching
+ *     entries, or 0 if none.
+ *
+ * If an entry has BOTH fixedPrice and discountPercent set, we treat it
+ * as malformed and skip it (admin form prevents this; double-check at
+ * read time).
+ */
+function bestCustomerPriceListOutcome(
+  entries: CustomerPriceListEntry[] | undefined,
+  productId: string,
+  sku: string,
+  categoryId: string | null | undefined,
+  brand: string | null | undefined,
+): { fixedPrice?: Money; percent: Money } {
+  let bestPct: Money = ZERO;
+  let fixedPrice: Money | undefined;
+
+  for (const entry of entries ?? []) {
+    const fp = entry.fixedPrice != null ? toMoney(entry.fixedPrice) : null;
+    const pct = entry.discountPercent != null ? toMoney(entry.discountPercent) : null;
+    if (fp != null && pct != null) continue;  // malformed; skip
+    if (fp == null && pct == null) continue;  // empty row; skip
+
+    if (!customerPriceMatches(entry, productId, sku, categoryId, brand)) continue;
+
+    if (fp != null) {
+      // fixedPrice only honored at PRODUCT scope. If the customer has
+      // multiple PRODUCT fixed-prices that somehow both match, the
+      // lowest (best for customer) wins.
+      if (entry.scope === CustomerPriceScope.PRODUCT) {
+        if (!fixedPrice || fp.lt(fixedPrice)) fixedPrice = fp;
+      }
+      continue;
+    }
+
+    if (pct != null && pct.gt(bestPct)) bestPct = pct;
+  }
+
+  return { fixedPrice, percent: bestPct };
+}
+
 function promotionAppliesToCustomer(
   promo: ActivePromotion,
   customerType: CustomerType,
@@ -154,11 +245,28 @@ function promotionAppliesToCustomer(
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export function calculatePrice(input: PriceInput): PricedProduct {
-  const priceBaseEx = roundMoney(toMoney(input.priceBase));
+  let priceBaseEx = roundMoney(toMoney(input.priceBase));
   const mvaRate = toMoney(input.mvaRate);
 
+  // Phase 8 — CustomerPriceList lookup. fixedPrice overrides priceBaseEx
+  // entirely (and short-circuits all percentage discounts); discountPercent
+  // competes with customerDefaultDiscount for the customer-tier slot.
+  const tier = bestCustomerPriceListOutcome(
+    input.customerPriceList,
+    input.productId,
+    input.sku,
+    input.categoryId,
+    input.brand,
+  );
+  let fixedPriceOverride: Money | undefined;
+  if (tier.fixedPrice) {
+    fixedPriceOverride = roundMoney(tier.fixedPrice);
+    priceBaseEx = fixedPriceOverride;
+  }
+
   const customerPctRaw = toMoney(input.customerDefaultDiscount ?? "0");
-  const customerPct = (customerPctRaw.lt(0) ? ZERO : customerPctRaw) as Money;
+  let customerPct = (customerPctRaw.lt(0) ? ZERO : customerPctRaw) as Money;
+  if (tier.percent.gt(customerPct)) customerPct = tier.percent;
 
   let bestPromoPct: Money = ZERO;
   let bestPromo: ActivePromotion | undefined;
@@ -199,7 +307,17 @@ export function calculatePrice(input: PriceInput): PricedProduct {
     discountSource = DiscountSource.NONE;
   }
 
-  const factor = ONE.minus(discountPct.div(HUNDRED)) as Money;
+  // Phase 8 — fixedPrice override skips percentage math entirely.
+  // The customer agreed to a flat per-unit price; promotion + tier
+  // percent are irrelevant against that contract.
+  const factor =
+    fixedPriceOverride
+      ? ONE
+      : ONE.minus(discountPct.div(HUNDRED)) as Money;
+  if (fixedPriceOverride) {
+    discountPct = ZERO;
+    discountSource = DiscountSource.CUSTOMER_DISCOUNT;
+  }
   const priceEx = roundMoney(priceBaseEx.mul(factor) as Money);
   const mvaAmount = roundMoney(priceEx.mul(mvaRate) as Money);
   // priceInc is deliberately not re-rounded; it is the sum of two

@@ -143,6 +143,15 @@ enum QuoteStatus {
   CONVERTED     // Already turned into a Sale
 }
 
+// ─── Phase 8 — B2B richness ──────────────────────────────────────────────────
+
+enum CustomerPriceScope {
+  GLOBAL    // Applies to every product for this customer
+  CATEGORY  // Applies to a specific category (scopeId = Category.id)
+  BRAND     // Applies to a specific brand string (scopeId = brand text)
+  PRODUCT   // Applies to a single product (scopeId = Product.id)
+}
+
 enum ProductRequestStatus {
   PENDING
   IN_ENRICHMENT
@@ -208,6 +217,11 @@ model Profile {
   backupPublicKey      String?
   // Timestamp of the most recent successful backup download.
   lastBackupAt         DateTime?
+  // ─── Phase 8 — marketing consent ─────────────────────────────────────────
+  // Timestamp of the most recent affirmative marketing-email opt-in.
+  // Null = no consent → transactional emails only. Email-send audit at
+  // the notification-service layer enforces this.
+  marketingConsentAt   DateTime?
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 
@@ -226,6 +240,7 @@ model Profile {
   savedMachines       SavedMachine[]
   returnRequests      ReturnRequest[]    @relation("CustomerReturns")
   quotes              Quote[]            @relation("CustomerQuotes")
+  customerPriceList   CustomerPriceList[]
 }
 
 model Store {
@@ -318,10 +333,13 @@ model Product {
   //                 for FTS rank.
   searchKey            String?
   searchVector         Unsupported("tsvector")?
+  // ─── Phase 8 — supplier preference ─────────────────────────────────────
+  preferredSupplierId  String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
   category       Category?       @relation(fields: [categoryId], references: [id])
+  preferredSupplier Supplier?    @relation("PreferredSupplier", fields: [preferredSupplierId], references: [id])
   stock          StoreStock[]
   saleItems      SaleItem[]
   priceHistory   PriceHistory[]
@@ -454,6 +472,8 @@ model Sale {
   authorizedAt      DateTime?         // When Vipps confirmed AUTHORIZED via webhook
   capturedAt        DateTime?         // When captureSaleOnDispatch completed
   capturedAmount    Decimal?          // Amount actually captured (may differ from totalPrice if partial fulfilment)
+  // ─── Phase 8 — backorder workflow ────────────────────────────────────────
+  hasBackorderedItems Boolean         @default(false)
 
   customer        Profile?           @relation("CustomerSales", fields: [customerId], references: [id])
   createdByAdmin  Profile?           @relation("AdminSales", fields: [createdByAdminId], references: [id])
@@ -480,6 +500,9 @@ model SaleItem {
   discountSource        DiscountSource @default(NONE)
   promotionId           String?
   discountPercentage    Decimal        @default(0)
+
+  // ─── Phase 8 — backorder workflow ────────────────────────────────────────
+  expectedAvailableAt DateTime?
 
   sale        Sale         @relation(fields: [saleId], references: [id])
   product     Product      @relation(fields: [productId], references: [id])
@@ -577,6 +600,52 @@ model QuoteItem {
 
   quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
+}
+
+// ─── Phase 8 — Supplier ──────────────────────────────────────────────────────
+model Supplier {
+  id          String   @id @default(cuid())
+  name        String
+  orgNumber   String?
+  email       String?
+  phone       String?
+  address     String?
+  postalCode  String?
+  city        String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[] @relation("PreferredSupplier")
+}
+
+// ─── Phase 8 — Per-customer pricing tiers ────────────────────────────────────
+//
+// Replaces the flat Profile.defaultDiscount semantics. A customer can have
+// many entries — pricing engine picks the BEST applicable one ("highest
+// discount wins"). Specificity tiebreaker: PRODUCT > BRAND > CATEGORY >
+// GLOBAL when multiple entries apply with equal discount.
+//
+// discountPercent and fixedPrice are mutually exclusive; the pricing engine
+// rejects rows with both set or both null at read time.
+model CustomerPriceList {
+  id              String              @id @default(cuid())
+  profileId       String
+  scope           CustomerPriceScope
+  // For GLOBAL, scopeId is null. For others it's the FK-or-string into the
+  // relevant entity (Category.id, brand text, Product.id) — relations are
+  // intentionally NOT enforced because brand is free-text.
+  scopeId         String?
+  discountPercent Decimal?
+  fixedPrice      Decimal?
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, scope])
 }
 
 model StockTransfer {
