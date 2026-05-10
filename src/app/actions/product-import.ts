@@ -1,8 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { enrichProductDirectly } from "@/lib/product-enrichment";
-import { runFitmentEnrichmentForProduct } from "@/lib/fitment-enrichment";
+import { enqueueEnrichment } from "@/lib/queue/enrichment";
 import { findOrCreateCategoryByPath } from "@/app/actions/category";
 import {
   ProductCondition,
@@ -200,11 +199,9 @@ export async function importProductsAction(
       });
       created++;
 
-      // Fire enrichment per product — don't await, let the loop continue
-      void Promise.allSettled([
-        enrichProductDirectly(sku),
-        runFitmentEnrichmentForProduct(sku),
-      ]);
+      // Enqueue enrichment per product (Phase 4). Both data + fitment
+      // enrichment run inside the same job handler.
+      await enqueueEnrichment(sku);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Ukjent feil";
       errors.push(`${row.sku ?? "?"}: ${msg}`);

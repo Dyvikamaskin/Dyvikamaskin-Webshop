@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
-import { checkAndNotifyLowStock } from "@/lib/notification-service";
+import { enqueueNotification } from "@/lib/queue/notifications";
 import {
   UserRole,
   StocktakeStatus,
@@ -246,7 +246,11 @@ export async function finaliseStocktakeAction(
     .filter((i) => i.discrepancy !== 0)
     .map((i) => i.productId);
   if (adjustedProductIds.length > 0) {
-    void checkAndNotifyLowStock(session.store.id, adjustedProductIds);
+    await enqueueNotification({
+      kind: "low-stock",
+      storeId: session.store.id,
+      productIds: adjustedProductIds,
+    });
   }
 
   await logAudit(admin.id, "STOCKTAKE_COMPLETED", "StocktakeSession", sessionId, null, {

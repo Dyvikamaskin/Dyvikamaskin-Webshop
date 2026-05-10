@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { validateCart } from "@/lib/cart";
 import { determineBatchSlot } from "@/lib/batch";
-import { notifyOrderConfirmed } from "@/lib/notification-service";
+import { enqueueNotification } from "@/lib/queue/notifications";
 import { requireRole } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { generateInvoiceForSale } from "@/lib/invoice-service";
@@ -146,7 +146,7 @@ export async function createPhoneOrderAction(
     } catch (err) {
       console.error("[phone-order] invoice generation failed", saleId, err);
     }
-    void notifyOrderConfirmed(saleId);
+    await enqueueNotification({ kind: "order-confirmed", saleId });
   }
 
   await logAudit(admin.id, "PHONE_ORDER_CREATED", "Sale", checkoutSessionId, null, {

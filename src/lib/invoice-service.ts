@@ -12,6 +12,7 @@ import { generateKid } from "./kid";
 import { OrderStatus } from "@/app/generated/prisma/enums";
 import { renderInvoicePdf } from "./invoice-pdf";
 import { notifyInvoiceIssued } from "./notification-service";
+import { enqueueNotification } from "@/lib/queue/notifications";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -80,18 +81,26 @@ export async function generateInvoiceForSale(
     },
   });
 
-  // ── Fire invoice email with PDF attachment (non-blocking) ────────────────
-  void sendInvoiceNotification(saleId, invoiceNumber, kidNumber, invoiceDueDate, dueDays);
+  // ── Enqueue invoice notification (PDF render + email). The handler
+  //    runs in the BullMQ worker; returns once Redis has the job. ─────────
+  await enqueueNotification({
+    kind: "invoice-issued",
+    saleId,
+    invoiceNumber,
+    kidNumber,
+    invoiceDueDate,
+    dueDays,
+  });
 
   return { invoiceNumber, kidNumber, invoiceDueDate, alreadyExisted: false };
 }
 
-async function sendInvoiceNotification(
+export async function sendInvoiceNotification(
   saleId: string,
   invoiceNumber: string,
   kidNumber: string,
   invoiceDueDate: Date,
-  dueDays: number
+  dueDays: number,
 ) {
   try {
     // Only send email for B2B (dueDays > 0) or explicitly — B2C gets confirmation email

@@ -12,13 +12,14 @@ For deep context read these in order:
 
 ## Where the code is
 
-Current branch: `phase-3-vipps-capture-stock-reservations` (`eae5759`, pushed to origin).
+Current branch: `phase-4-job-queue` (local-only at time of writing, push when ready).
 
 Branch stack (newest on top — each builds on the previous):
 
 | Branch | Latest commit | Phase |
 |--------|--------------|-------|
-| `phase-3-vipps-capture-stock-reservations` | `eae5759` | 3 |
+| `phase-4-job-queue` | (local — pending push) | 4 |
+| `phase-3-vipps-capture-stock-reservations` | `fe6447b` | 3 + docs refresh |
 | `phase-2-money-correctness` | `5af16ff` | 2 |
 | `phase-0-7-condition-provenance-filters` | `8ea6009` | 0.7 + docs refresh |
 | `phase-0-6-dynamic-categories` | `4874c88` | 0.6 + handoff doc |
@@ -41,14 +42,32 @@ When ready to merge, the chain merges into `main` in order.
 | 1 Foundations | ✅ Shipped | Vitest, Playwright, CI workflow. WebhookEvent migration applied to prod. |
 | 2 Money correctness (Decimal) | ✅ Shipped | `Money` brand on Prisma.Decimal; pricing.ts rejects raw `number`; cart pipeline strings across the wire; Vipps webhook + MVA tax CSV use Decimal sums. 16 new edge-case tests. No schema change. |
 | 3 Vipps capture-on-dispatch + Stock reservations | ✅ Shipped | §38 compliance gap closed: capture-on-dispatch only. New `StockReservation` table; race fence at checkout. Webhook split (handleAuthorized/handleCaptured/handleVoided). `captureSaleOnDispatch` is the single dispatch entry point, wired into both admin "Mark shipped" and the MyBring label route. Migration applied to prod 2026-05-10. |
-| 4 Job queue (BullMQ) | ⏳ Not started | Decision needed: co-host worker (free) vs separate Railway service ($5/mo) |
+| 4 Job queue (BullMQ) | ✅ Shipped (v1) | Co-host model (option A). 2 queue domains: `notifications` (5 job types) + `enrichment`. Workers boot via `src/instrumentation.ts` Next 16 hook. **Requires `REDIS_URL`** — see "Env vars" below. PDF queue, BullMQ-cron migration, and invoice 202+polling deferred as Phase 4 follow-ups. |
 | 5–9 | ⏳ Not started | |
 
 ## Verified locally as of last commit
 
 - `npm run audit:links` — 41 pages, 18 APIs, **0 broken** (2 stub references tracked in registry)
-- `npm test` — **49/49** passing across 5 test files (KID/Luhn, modulo-11 Brreg, slugify, pricing edge cases, stock reservations)
+- `npm test` — **59/59** passing across 7 test files (KID/Luhn, modulo-11 Brreg, slugify, pricing edge cases, stock reservations, queue dispatch ×2)
 - `npm run typecheck` — clean (only pre-existing stale `.next/types/validator.ts` stubs)
+
+## Env vars added in Phase 4
+
+```
+# BullMQ — raw Redis protocol, NOT the same as the Upstash REST creds.
+# Grab the TCP URL from the Upstash dashboard "Connect" tab; format is
+# rediss://default:<password>@<host>:6379
+REDIS_URL=
+```
+
+The `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` env vars stay
+for `@upstash/ratelimit` (which uses REST). Both Upstash creds point at
+the same Redis database; BullMQ just needs the protocol-level handle.
+
+If `REDIS_URL` is missing at boot the queue subsystem logs a clear
+warning and skips starting workers. Server actions that try to enqueue
+will throw at the call site — that's intentional, so missing config
+fails loud rather than silently dropping jobs.
 
 ## Production DB state
 
@@ -98,7 +117,7 @@ issue. Ship the merge train when the next phase milestone lands.
 - **Worker hosting (Phase 4):** co-hosted in main process initially;
   split to dedicated Railway service only if memory pressure forces it.
 
-## Decisions made in Phase 2 + 3 conversations
+## Decisions made in Phase 2 + 3 + 4 conversations
 
 - **B2B payment paths:** Vipps **or** invoice today. Bank transfer + credit
   card are future expansion (no Phase 3 special-casing required).
@@ -113,12 +132,15 @@ issue. Ship the merge train when the next phase milestone lands.
   shape — not yet implemented; add when post-launch operations need it.
 - **Decimal library:** plan's `decimal.js-light` was replaced with Prisma 7's
   bundled `decimal.js` directly to avoid a dual-decimal-library bundle.
+- **Phase 4 worker hosting (option A — co-host):** workers run inside the
+  main Next.js process via `src/instrumentation.ts`. Migrate to a separate
+  Railway service (option B) only on memory pressure or HTTP-latency
+  regression. See [docs/handoff.md] notes on the swap path — same
+  codebase, just a different launcher.
 
 ## Decisions still pending — need user sign-off before code
 
 1. **Phase 6 — MFA grace period for existing admins.** Default 7 days.
-2. **Phase 4 — Worker hosting.** Co-host in main process (free, dies on
-   scale-down) vs separate Railway service (+$5/mo). Default A.
 
 ## Infra state
 
@@ -151,6 +173,21 @@ The project memory file at `~/.claude/projects/C--Users-Ventura-AI/memory/projec
 
 ## Open follow-ups not in any phase commit
 
+- **Phase 4 follow-ups:**
+  - **PDF queue.** Invoice PDF rendering currently runs inside the
+    `notifications:invoice-issued` job handler. Splitting it out to
+    its own queue lets us cap concurrency separately and add a
+    polling endpoint for "is the invoice PDF ready yet?" UX.
+  - **Cron migration.** `/api/jobs/expire-reservations` is still a
+    REST endpoint hit by Railway's `curl` cron service. BullMQ
+    repeating jobs should replace this; once verified, retire the
+    Railway curl service.
+  - **Invoice 202 + polling.** The plan calls for the invoice route
+    to return 202 immediately and expose a status-poll endpoint.
+    Today the route is synchronous; deferred until the PDF queue
+    above is in place.
+  - **Sentry alert wiring** for failed jobs. BullMQ's `failed` event
+    logs to console; pipe to Sentry so terminal failures page on-call.
 - **Refund flow** (Phase 3 follow-up). The Vipps `REFUNDED` webhook is
   currently logged-only; no Sale lifecycle update, no admin "Refund" UI.
   When refunds become operationally relevant, add `handleRefund` in the
@@ -172,15 +209,19 @@ The project memory file at `~/.claude/projects/C--Users-Ventura-AI/memory/projec
 
 ## What to start on next
 
-1. **Phase 4 — Job queue (BullMQ).** Confirm worker-hosting decision
-   (co-host vs separate Railway service), then build out the queue + 4
-   worker domains (enrichment, pdf, email, sms). Replaces the existing
-   fire-and-forget patterns and the current `/api/jobs/expire-reservations`
-   cron.
-2. **Open follow-ups** as appetite allows.
-3. **Phase 5 — Search (pg_trgm + FTS).** Pure additive on `Product` plus a
-   trigger; no decision-making needed before starting.
+1. **Phase 4 follow-ups** (small, parallelisable):
+   - Add `REDIS_URL` to Railway env (Upstash dashboard → Connect tab)
+     so workers actually boot in production. Without it, the warning
+     in `[queue]` logs is the loudest signal you'll get.
+   - Migrate `expire-reservations` to a BullMQ repeating job, then
+     retire the Railway `curl` cron service.
+   - Wire `failed` events to Sentry.
+2. **Phase 5 — Search (pg_trgm + FTS).** Pure additive on `Product`
+   plus a trigger; no decision-making needed before starting.
+3. **Open follow-ups** as appetite allows (PDF queue, refund flow,
+   Phase 2 polish, edit-product form, drag-to-reorder).
 
 Or, if you want to ship what's already on the stack: merge the Phase
-0–3 chain into `main` so Railway picks it up. The schema is already
-prod-ready and the code is gated by typecheck + 49 unit tests.
+0–4 chain into `main` so Railway picks it up. The schema is already
+prod-ready and the code is gated by typecheck + 59 unit tests. Set
+`REDIS_URL` on Railway before that deploy or workers won't start.

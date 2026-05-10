@@ -5,7 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { buildLocationCode } from "@/lib/location-code";
-import { notifyShipped, notifyReadyForPickup } from "@/lib/notification-service";
+import { enqueueNotification } from "@/lib/queue/notifications";
 import { captureSaleOnDispatch } from "@/services/payments/vipps";
 import {
   UserRole,
@@ -68,9 +68,15 @@ export async function updateFulfillmentStatusAction(
     { fulfillmentStatus },
   );
 
-  // Fire notifications (non-blocking)
-  if (fulfillmentStatus === FulfillmentStatus.SHIPPED)           void notifyShipped(saleId);
-  if (fulfillmentStatus === FulfillmentStatus.READY_FOR_PICKUP)  void notifyReadyForPickup(saleId);
+  // Notifications go via BullMQ (Phase 4) — failed sends retry, terminal
+  // failures surface in Sentry. await is intentional and cheap; the queue
+  // add returns once the job is in Redis.
+  if (fulfillmentStatus === FulfillmentStatus.SHIPPED) {
+    await enqueueNotification({ kind: "shipped", saleId });
+  }
+  if (fulfillmentStatus === FulfillmentStatus.READY_FOR_PICKUP) {
+    await enqueueNotification({ kind: "ready-for-pickup", saleId });
+  }
 
   revalidatePath("/admin/ordrer");
   revalidatePath(`/admin/ordrer/${saleId}`);
