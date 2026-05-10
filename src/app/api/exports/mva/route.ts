@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { UserRole, OrderStatus } from "@/app/generated/prisma/enums";
@@ -43,13 +44,24 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // Aggregate by rate
-  const map = new Map<string, { excl: number; incl: number; sales: Set<string> }>();
+  // Aggregate by rate. Sums are Decimal end-to-end — this is the
+  // authoritative MVA-tax CSV submitted to Skatteetaten, so per-line
+  // float coercion is not safe here.
+  const map = new Map<
+    string,
+    { excl: Prisma.Decimal; incl: Prisma.Decimal; sales: Set<string> }
+  >();
   for (const item of items) {
     const rateKey = item.mvaRate.toFixed(4);
-    const g = map.get(rateKey) ?? { excl: 0, incl: 0, sales: new Set<string>() };
-    g.excl += item.lineTotalExclMva.toNumber();
-    g.incl += item.lineTotalInclMva.toNumber();
+    const g =
+      map.get(rateKey) ??
+      {
+        excl: new Prisma.Decimal(0),
+        incl: new Prisma.Decimal(0),
+        sales: new Set<string>(),
+      };
+    g.excl = g.excl.plus(item.lineTotalExclMva);
+    g.incl = g.incl.plus(item.lineTotalInclMva);
     g.sales.add(item.saleId);
     map.set(rateKey, g);
   }
@@ -61,7 +73,7 @@ export async function GET(request: NextRequest) {
         pct:        `${Math.round(rate * 100)} %`,
         orderCount: g.sales.size,
         excl:       g.excl,
-        mva:        g.incl - g.excl,
+        mva:        g.incl.minus(g.excl),
         incl:       g.incl,
       };
     })
@@ -69,8 +81,8 @@ export async function GET(request: NextRequest) {
 
   const sep = ";";
 
-  function num(n: number): string {
-    return n.toFixed(2).replace(".", ",");
+  function num(d: Prisma.Decimal): string {
+    return d.toFixed(2).replace(".", ",");
   }
 
   function esc(v: string): string {
@@ -108,8 +120,16 @@ export async function GET(request: NextRequest) {
   // Grand total row
   if (groups.length > 0) {
     const grand = groups.reduce(
-      (acc, g) => ({ excl: acc.excl + g.excl, mva: acc.mva + g.mva, incl: acc.incl + g.incl }),
-      { excl: 0, mva: 0, incl: 0 }
+      (acc, g) => ({
+        excl: acc.excl.plus(g.excl),
+        mva: acc.mva.plus(g.mva),
+        incl: acc.incl.plus(g.incl),
+      }),
+      {
+        excl: new Prisma.Decimal(0),
+        mva: new Prisma.Decimal(0),
+        incl: new Prisma.Decimal(0),
+      },
     );
     rows.push(
       [

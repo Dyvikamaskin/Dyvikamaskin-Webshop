@@ -14,12 +14,14 @@ export interface CartItem {
   categoryId: string | null;
   minimumOrderQuantity: number;
   quantity: number;
-  /** Unit price ex. MVA — snapshot at time of add / last server validation */
-  priceEx: number;
-  /** Unit price inc. MVA */
-  priceInc: number;
-  mvaRate: number;
-  discountPct: number;
+  /** Unit price ex. MVA — snapshot at time of add / last server validation. Decimal-formatted string. */
+  priceEx: string;
+  /** Unit price inc. MVA. Decimal-formatted string. */
+  priceInc: string;
+  /** MVA rate as a decimal-formatted string, e.g. "0.25". */
+  mvaRate: string;
+  /** Discount percentage as a decimal-formatted string, e.g. "10". */
+  discountPct: string;
   discountSource: string;
   promotionId?: string;
 }

@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Prisma } from "@/app/generated/prisma/client";
 import { useCartStore } from "@/lib/stores/use-cart";
 import { validateCartAction } from "@/app/actions/cart";
 import { formatPrice, formatNumber } from "@/lib/formatters";
 import type { ValidatedCart } from "@/lib/cart";
 import Link from "next/link";
 import { CheckoutButton } from "@/components/cart/CheckoutButton";
+
+const D = Prisma.Decimal;
 
 /**
  * Client-side cart content component.
@@ -85,34 +88,42 @@ export function CartContent() {
     );
   }
 
-  // Build a uniform display shape from either server-validated or local data
+  // Build a uniform display shape from either server-validated or local data.
+  // Money fields are decimal-formatted strings end-to-end.
   type DisplayItem = {
     sku: string; name: string; brand: string | null; mainImage: string | null;
     quantity: number; minimumOrderQuantity: number;
-    priceEx: number; priceInc: number; mvaRate: number;
-    discountPct: number; discountSource: string; promotionId?: string;
-    lineTotalEx: number; lineTotalInc: number;
+    priceEx: string; priceInc: string; mvaRate: string;
+    discountPct: string; discountSource: string; promotionId?: string;
+    lineTotalEx: string; lineTotalInc: string;
     availableStock: number; stockWarning: boolean;
     storeStock: { storeId: string; storeName: string; quantity: number }[];
   };
 
-  const displayItems: DisplayItem[] = validated?.items ?? items.map((i) => ({
-    ...i,
-    lineTotalEx: i.priceEx * i.quantity,
-    lineTotalInc: i.priceInc * i.quantity,
-    availableStock: 0,
-    stockWarning: false,
-    storeStock: [],
-  }));
+  const displayItems: DisplayItem[] =
+    validated?.items ??
+    items.map((i) => ({
+      ...i,
+      lineTotalEx: new D(i.priceEx).mul(i.quantity).toString(),
+      lineTotalInc: new D(i.priceInc).mul(i.quantity).toString(),
+      availableStock: 0,
+      stockWarning: false,
+      storeStock: [],
+    }));
 
-  const grandTotalInc =
-    validated?.grandTotalInc ??
-    items.reduce((s, i) => s + i.priceInc * i.quantity, 0);
-  const grandTotalEx =
-    validated?.grandTotalEx ??
-    items.reduce((s, i) => s + i.priceEx * i.quantity, 0);
+  const fallbackEx = items.reduce(
+    (sum, i) => sum.plus(new D(i.priceEx).mul(i.quantity)),
+    new D(0),
+  );
+  const fallbackInc = items.reduce(
+    (sum, i) => sum.plus(new D(i.priceInc).mul(i.quantity)),
+    new D(0),
+  );
+
+  const grandTotalEx = validated?.grandTotalEx ?? fallbackEx.toString();
+  const grandTotalInc = validated?.grandTotalInc ?? fallbackInc.toString();
   const grandMva =
-    validated?.grandMvaAmount ?? grandTotalInc - grandTotalEx;
+    validated?.grandMvaAmount ?? fallbackInc.minus(fallbackEx).toString();
 
   return (
     <div>
@@ -257,7 +268,7 @@ export function CartContent() {
               <p style={{ fontSize: "0.8125rem", color: "#666" }}>
                 {formatPrice(item.priceInc)} / stk
               </p>
-              {item.discountPct > 0 && (
+              {new D(item.discountPct).gt(0) && (
                 <p style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 600 }}>
                   {formatNumber(item.discountPct, 0)}% rabatt
                 </p>

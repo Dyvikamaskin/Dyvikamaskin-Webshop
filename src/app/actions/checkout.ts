@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "crypto";
+import { Prisma } from "@/app/generated/prisma/client";
 import { validateCart } from "@/lib/cart";
 import { createVippsPayment, toOre } from "@/lib/vipps";
 import { determineBatchSlot } from "@/lib/batch";
@@ -42,7 +43,11 @@ export async function initiateCheckoutAction(
     // 1. Resolve customer profile
     const authUser = await getAuthUser();
     let customerProfile:
-      | { customerId: string; customerType: CustomerType; defaultDiscount: number }
+      | {
+          customerId: string;
+          customerType: CustomerType;
+          defaultDiscount: Prisma.Decimal | string;
+        }
       | undefined;
 
     if (authUser) {
@@ -54,7 +59,7 @@ export async function initiateCheckoutAction(
         customerProfile = {
           customerId: profile.id,
           customerType: profile.customerType as CustomerType,
-          defaultDiscount: profile.defaultDiscount.toNumber(),
+          defaultDiscount: profile.defaultDiscount,
         };
       }
     }
@@ -66,7 +71,7 @@ export async function initiateCheckoutAction(
       return { ok: false, error: "Ingen gyldige varer i handlekurven." };
     }
 
-    if (validated.grandTotalInc <= 0) {
+    if (new Prisma.Decimal(validated.grandTotalInc).lte(0)) {
       return { ok: false, error: "Totalbeløp kan ikke være 0." };
     }
 

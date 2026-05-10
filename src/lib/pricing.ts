@@ -1,5 +1,5 @@
 /**
- * Pricing engine — Phase 5
+ * Pricing engine — Phase 2 (Money correctness)
  *
  * Rules:
  * - consumerPrice = priceBase × (1 + mvaRate)   [inc. MVA, B2C]
@@ -7,8 +7,15 @@
  * - Highest single discount wins — no stacking.
  * - Promotion vs customer default discount: highest % wins.
  *   If equal, promotion wins (recorded for SaleItem.promotionId).
+ *
+ * Money discipline:
+ * - Inputs accept Prisma.Decimal or string. Raw `number` throws —
+ *   that is the bug pattern Phase 2 was built to fix.
+ * - Internal math is Decimal end-to-end. No JS-number coercion.
+ * - Per-line rounding to 2 decimals (øre) HALF_UP. Sums are NOT
+ *   re-rounded after summing rounded lines.
  */
-
+import { Prisma } from "@/app/generated/prisma/client";
 import {
   DiscountSource,
   DiscountType,
@@ -16,14 +23,42 @@ import {
   CustomerType,
   PromotionTargetType,
 } from "@/app/generated/prisma/enums";
-import { roundPrice } from "@/lib/formatters";
 
-// ─── Shared numeric helper ────────────────────────────────────────────────────
+// ─── Money brand + constructors ───────────────────────────────────────────────
 
-type Numeric = number | { toNumber(): number };
+/**
+ * Branded Decimal for money values. The `__money` phantom field cannot
+ * be constructed from outside this module, so callers must go through
+ * `toMoney()` to obtain one.
+ */
+export type Money = Prisma.Decimal & { readonly __money: never };
 
-function n(v: Numeric): number {
-  return typeof v === "number" ? v : v.toNumber();
+/** Acceptable input shape for any money value. */
+export type MoneyInput = Prisma.Decimal | string;
+
+const D = Prisma.Decimal;
+const ZERO = new D(0) as Money;
+const ONE = new D(1) as Money;
+const HUNDRED = new D(100) as Money;
+
+/**
+ * Convert input to a Money value.
+ * Accepts Prisma.Decimal (typical: straight from a Prisma query) or a
+ * decimal-formatted string. Anything else — including raw `number` —
+ * throws TypeError. This is the load-bearing guarantee that prevents
+ * silent precision loss inside the pricing engine.
+ */
+export function toMoney(value: MoneyInput): Money {
+  if (value instanceof D) return value as Money;
+  if (typeof value === "string") return new D(value) as Money;
+  throw new TypeError(
+    `Money requires Prisma.Decimal or string, received ${typeof value}`,
+  );
+}
+
+/** HALF_UP rounding to 2 decimals (øre). */
+export function roundMoney(value: Money): Money {
+  return value.toDecimalPlaces(2, D.ROUND_HALF_UP) as Money;
 }
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -31,56 +66,57 @@ function n(v: Numeric): number {
 export interface ActivePromotion {
   id: string;
   discountType: DiscountType;
-  discountValue: Numeric;
+  discountValue: MoneyInput;
   targetType: PromotionTargetType;
   targetId: string;
   appliesToCustomerType: PromotionAudience;
 }
 
 export interface PriceInput {
-  priceBase: Numeric;
-  mvaRate: Numeric;
+  priceBase: MoneyInput;
+  mvaRate: MoneyInput;
   productId: string;
   sku: string;
   categoryId?: string | null;
   brand?: string | null;
   customerType: CustomerType;
-  /** Percentage, e.g. 10 = 10 % off. Defaults to 0. */
-  customerDefaultDiscount?: Numeric;
+  /** Percentage as a decimal where 10 = 10 %. Defaults to 0. */
+  customerDefaultDiscount?: MoneyInput;
   activePromotions?: ActivePromotion[];
 }
 
 export interface PricedProduct {
-  /** Base price ex. MVA (before any discount) */
-  priceBaseEx: number;
-  /** Effective unit price ex. MVA (after discount) */
-  priceEx: number;
-  /** Effective unit price inc. MVA (after discount) */
-  priceInc: number;
-  /** MVA amount on the effective price */
-  mvaAmount: number;
-  /** MVA rate as a decimal, e.g. 0.25 */
-  mvaRate: number;
-  /** Discount percentage applied (0–100) */
-  discountPct: number;
+  /** Base price ex. MVA (before any discount), rounded. */
+  priceBaseEx: Money;
+  /** Effective unit price ex. MVA (after discount), rounded. */
+  priceEx: Money;
+  /** Effective unit price inc. MVA (after discount). Sum of two
+   *  rounded values, not re-rounded — matches the per-line rule. */
+  priceInc: Money;
+  /** MVA amount on the effective price, rounded. */
+  mvaAmount: Money;
+  /** MVA rate as a decimal, e.g. 0.25 — passed through unrounded. */
+  mvaRate: Money;
+  /** Discount percentage applied (0–100). */
+  discountPct: Money;
   discountSource: DiscountSource;
-  /** Set when discountSource === PROMOTION */
+  /** Set when discountSource === PROMOTION. */
   promotionId?: string;
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 /**
- * Convert promotion discountValue to an equivalent percentage of the
- * base ex-MVA price. Returns 0 when a FIXED_AMOUNT promotion exceeds
- * the base price (no negative prices).
+ * Convert a promotion's discountValue to an equivalent percentage of
+ * the base ex-MVA price. Returns 0 when a FIXED_AMOUNT promotion
+ * exceeds the base price (no negative prices). Caps at 100 %.
  */
-function promotionToPct(promo: ActivePromotion, priceBaseEx: number): number {
-  const val = n(promo.discountValue);
-  if (promo.discountType === DiscountType.PERCENTAGE) return val;
-  // FIXED_AMOUNT — express as percentage
-  if (priceBaseEx <= 0) return 0;
-  return Math.min(100, roundPrice((val / priceBaseEx) * 100));
+function promotionToPct(promo: ActivePromotion, priceBaseEx: Money): Money {
+  const value = toMoney(promo.discountValue);
+  if (promo.discountType === DiscountType.PERCENTAGE) return value;
+  if (priceBaseEx.lte(0)) return ZERO;
+  const pct = value.div(priceBaseEx).mul(HUNDRED) as Money;
+  return (pct.gt(HUNDRED) ? HUNDRED : pct) as Money;
 }
 
 function promotionMatchesProduct(
@@ -88,7 +124,7 @@ function promotionMatchesProduct(
   productId: string,
   sku: string,
   categoryId: string | null | undefined,
-  brand: string | null | undefined
+  brand: string | null | undefined,
 ): boolean {
   switch (promo.targetType) {
     case PromotionTargetType.PRODUCT:
@@ -104,7 +140,7 @@ function promotionMatchesProduct(
 
 function promotionAppliesToCustomer(
   promo: ActivePromotion,
-  customerType: CustomerType
+  customerType: CustomerType,
 ): boolean {
   return (
     promo.appliesToCustomerType === PromotionAudience.BOTH ||
@@ -117,22 +153,14 @@ function promotionAppliesToCustomer(
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-/**
- * Calculate the effective price for a product given the customer context.
- *
- * Highest single discount wins — no stacking.
- * If promotion discount >= customer discount, promotion wins.
- * If no discount applies, source is NONE.
- */
 export function calculatePrice(input: PriceInput): PricedProduct {
-  const priceBaseEx = roundPrice(n(input.priceBase));
-  const mvaRate = n(input.mvaRate);
+  const priceBaseEx = roundMoney(toMoney(input.priceBase));
+  const mvaRate = toMoney(input.mvaRate);
 
-  // 1. Customer default discount (percentage, e.g. 10 = 10 %)
-  const customerPct = Math.max(0, n(input.customerDefaultDiscount ?? 0));
+  const customerPctRaw = toMoney(input.customerDefaultDiscount ?? "0");
+  const customerPct = (customerPctRaw.lt(0) ? ZERO : customerPctRaw) as Money;
 
-  // 2. Best matching promotion
-  let bestPromoPct = 0;
+  let bestPromoPct: Money = ZERO;
   let bestPromo: ActivePromotion | undefined;
 
   for (const promo of input.activePromotions ?? []) {
@@ -142,40 +170,41 @@ export function calculatePrice(input: PriceInput): PricedProduct {
         input.productId,
         input.sku,
         input.categoryId,
-        input.brand
+        input.brand,
       )
     )
       continue;
     if (!promotionAppliesToCustomer(promo, input.customerType)) continue;
 
     const pct = promotionToPct(promo, priceBaseEx);
-    if (pct > bestPromoPct) {
+    if (pct.gt(bestPromoPct)) {
       bestPromoPct = pct;
       bestPromo = promo;
     }
   }
 
-  // 3. Highest wins
-  let discountPct: number;
+  let discountPct: Money;
   let discountSource: DiscountSource;
   let promotionId: string | undefined;
 
-  if (bestPromoPct > 0 && bestPromoPct >= customerPct) {
+  if (bestPromoPct.gt(0) && bestPromoPct.gte(customerPct)) {
     discountPct = bestPromoPct;
     discountSource = DiscountSource.PROMOTION;
     promotionId = bestPromo!.id;
-  } else if (customerPct > 0) {
+  } else if (customerPct.gt(0)) {
     discountPct = customerPct;
     discountSource = DiscountSource.CUSTOMER_DISCOUNT;
   } else {
-    discountPct = 0;
+    discountPct = ZERO;
     discountSource = DiscountSource.NONE;
   }
 
-  // 4. Apply
-  const priceEx = roundPrice(priceBaseEx * (1 - discountPct / 100));
-  const mvaAmount = roundPrice(priceEx * mvaRate);
-  const priceInc = roundPrice(priceEx + mvaAmount);
+  const factor = ONE.minus(discountPct.div(HUNDRED)) as Money;
+  const priceEx = roundMoney(priceBaseEx.mul(factor) as Money);
+  const mvaAmount = roundMoney(priceEx.mul(mvaRate) as Money);
+  // priceInc is deliberately not re-rounded; it is the sum of two
+  // already-rounded values, which has at most 2 decimal places.
+  const priceInc = priceEx.plus(mvaAmount) as Money;
 
   return {
     priceBaseEx,
@@ -194,15 +223,15 @@ export function calculatePrice(input: PriceInput): PricedProduct {
  * Promotions still apply if passed.
  */
 export function getConsumerPrice(
-  priceBase: Numeric,
-  mvaRate: Numeric,
+  priceBase: MoneyInput,
+  mvaRate: MoneyInput,
   productId: string,
   sku: string,
   options?: {
     categoryId?: string | null;
     brand?: string | null;
     activePromotions?: ActivePromotion[];
-  }
+  },
 ): PricedProduct {
   return calculatePrice({
     priceBase,
@@ -218,16 +247,16 @@ export function getConsumerPrice(
  * Shorthand: business (B2B) price with optional customer discount.
  */
 export function getBusinessPrice(
-  priceBase: Numeric,
-  mvaRate: Numeric,
+  priceBase: MoneyInput,
+  mvaRate: MoneyInput,
   productId: string,
   sku: string,
   options?: {
     categoryId?: string | null;
     brand?: string | null;
-    customerDefaultDiscount?: Numeric;
+    customerDefaultDiscount?: MoneyInput;
     activePromotions?: ActivePromotion[];
-  }
+  },
 ): PricedProduct {
   return calculatePrice({
     priceBase,

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   verifyWebhookAuthorization,
@@ -145,18 +146,19 @@ async function handleAuthorized(event: VippsWebhookEvent) {
     }
   }
 
-  // Capture the successful portion of the payment
+  // Capture the successful portion of the payment.
+  // Summed as Decimal so we hit Vipps with bit-exact øre amounts.
   const successfulTotalInc = sales
     .filter((s) => successfulSaleIds.includes(s.id))
-    .reduce((sum, s) => sum + s.totalPrice.toNumber(), 0);
+    .reduce((sum, s) => sum.plus(s.totalPrice), new Prisma.Decimal(0));
 
   const failedTotalInc = failedSales.reduce(
-    (sum, s) => sum + s.totalPrice.toNumber(),
-    0
+    (sum, s) => sum.plus(s.totalPrice),
+    new Prisma.Decimal(0),
   );
 
   try {
-    if (successfulTotalInc > 0) {
+    if (successfulTotalInc.gt(0)) {
       await captureVippsPayment(checkoutSessionId, toOre(successfulTotalInc));
       await logAuditEvent(
         `VIPPS_AUTHORIZED${idempotencyKey ? `:${idempotencyKey}` : ""}`,
@@ -170,7 +172,7 @@ async function handleAuthorized(event: VippsWebhookEvent) {
     }
 
     // Refund for any failed sub-orders
-    if (failedTotalInc > 0 && successfulTotalInc > 0) {
+    if (failedTotalInc.gt(0) && successfulTotalInc.gt(0)) {
       // Already captured — issue partial refund
       await refundVippsPayment(checkoutSessionId, toOre(failedTotalInc));
       await logAuditEvent("VIPPS_PARTIAL_REFUND", checkoutSessionId, {
@@ -178,7 +180,7 @@ async function handleAuthorized(event: VippsWebhookEvent) {
         failedSaleIds: failedSales.map((s) => s.id),
         reason: "Insufficient stock",
       });
-    } else if (failedTotalInc > 0 && successfulTotalInc === 0) {
+    } else if (failedTotalInc.gt(0) && successfulTotalInc.eq(0)) {
       // Nothing succeeded — we captured 0, just log the failure
       // Vipps will auto-expire the authorisation
       await logAuditEvent("VIPPS_FULL_STOCK_FAILURE", checkoutSessionId, {

@@ -103,9 +103,9 @@ export function ProductCard({ product, customerType }: ProductCardProps) {
               ? `${formatPrice(priced.priceInc)} inkl. MVA`
               : `${formatPrice(priced.priceEx)} eks. MVA`}
           </p>
-          {priced.discountPct > 0 && (
+          {priced.discountPct.gt(0) && (
             <p style={{ fontSize: "0.75rem", color: "#16a34a", fontWeight: 600 }}>
-              {Math.round(priced.discountPct)}% rabatt
+              {priced.discountPct.toDecimalPlaces(0).toString()}% rabatt
             </p>
           )}
         </div>

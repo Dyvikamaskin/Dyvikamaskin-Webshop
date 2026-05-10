@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@/app/generated/prisma/client";
 import { getSingleItemPricing, validateCart } from "@/lib/cart";
 import { getAuthUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -7,17 +8,25 @@ import { CustomerType } from "@/app/generated/prisma/enums";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * Money fields are decimal-formatted strings to cross the server-action
+ * boundary safely. Clients reconstruct a Prisma.Decimal at the next
+ * arithmetic boundary.
+ */
 export interface ItemPricingResult {
-  priceEx: number;
-  priceInc: number;
-  mvaRate: number;
-  discountPct: number;
+  priceEx: string;
+  priceInc: string;
+  mvaRate: string;
+  discountPct: string;
   discountSource: string;
   promotionId?: string;
   availableStock: number;
 }
 
-type CustomerProfile = { customerType: CustomerType; defaultDiscount: number };
+type CustomerProfile = {
+  customerType: CustomerType;
+  defaultDiscount: Prisma.Decimal | string;
+};
 
 // ─── Shared helper ────────────────────────────────────────────────────────────
 
@@ -38,7 +47,7 @@ async function resolveCustomerProfile(): Promise<CustomerProfile | undefined> {
 
   return {
     customerType: profile.customerType as CustomerType,
-    defaultDiscount: profile.defaultDiscount.toNumber(),
+    defaultDiscount: profile.defaultDiscount,
   };
 }
 

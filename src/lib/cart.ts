@@ -1,29 +1,44 @@
 /**
- * Server-side cart utilities — Phase 6
+ * Server-side cart utilities — Phase 2 (Money correctness).
  *
  * Validates stock, calculates pricing, and splits a cart across stores.
  * Never imported by client components — server only.
+ *
+ * Money discipline: all internal arithmetic uses Prisma.Decimal. Public
+ * types (ValidatedCart, ValidatedCartItem, CartStoreSplit, the return
+ * shape of getSingleItemPricing) carry money as strings — that is what
+ * crosses the server-action wire and what the Zustand cart store
+ * persists. Callers parse to Decimal again at the next math boundary.
  */
-
+import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { calculatePrice } from "@/lib/pricing";
+import { calculatePrice, type Money } from "@/lib/pricing";
 import { getActivePromotionsForProducts } from "@/lib/promotions";
-import { roundPrice } from "@/lib/formatters";
 import { CustomerType } from "@/app/generated/prisma/enums";
 import type { CartItem } from "@/lib/stores/use-cart";
+
+const D = Prisma.Decimal;
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export interface ValidatedCartItem
-  extends Omit<CartItem, "priceEx" | "priceInc" | "mvaRate" | "discountPct" | "discountSource" | "promotionId"> {
-  priceEx: number;
-  priceInc: number;
-  mvaRate: number;
-  discountPct: number;
+  extends Omit<
+    CartItem,
+    | "priceEx"
+    | "priceInc"
+    | "mvaRate"
+    | "discountPct"
+    | "discountSource"
+    | "promotionId"
+  > {
+  priceEx: string;
+  priceInc: string;
+  mvaRate: string;
+  discountPct: string;
   discountSource: string;
   promotionId?: string;
-  lineTotalEx: number;
-  lineTotalInc: number;
+  lineTotalEx: string;
+  lineTotalInc: string;
   /** Available stock across all stores */
   availableStock: number;
   /** true when requested qty > available stock */
@@ -35,24 +50,24 @@ export interface CartStoreSplit {
   storeId: string;
   storeName: string;
   items: ValidatedCartItem[];
-  subtotalEx: number;
-  mvaAmount: number;
-  totalInc: number;
+  subtotalEx: string;
+  mvaAmount: string;
+  totalInc: string;
 }
 
 export interface ValidatedCart {
   items: ValidatedCartItem[];
   splits: CartStoreSplit[];
-  grandTotalEx: number;
-  grandMvaAmount: number;
-  grandTotalInc: number;
+  grandTotalEx: string;
+  grandMvaAmount: string;
+  grandTotalInc: string;
   isMultiStore: boolean;
   hasStockWarnings: boolean;
 }
 
 interface CustomerProfile {
   customerType: CustomerType;
-  defaultDiscount: { toNumber(): number } | number;
+  defaultDiscount: Prisma.Decimal | string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -63,31 +78,26 @@ interface CustomerProfile {
  * store with the most stock for that product.
  */
 function assignStoresToItems(
-  items: ValidatedCartItem[]
+  items: ValidatedCartItem[],
 ): ValidatedCartItem[] {
-  // Map: storeId → running set of SKUs assigned to it
   const storeAssignments = new Map<string, Set<string>>();
 
   return items.map((item) => {
-    if (item.storeStock.length === 0) return item; // no stock anywhere
+    if (item.storeStock.length === 0) return item;
 
-    // Sort by quantity descending
     const sorted = [...item.storeStock].sort((a, b) => b.quantity - a.quantity);
 
-    // Prefer a store that already has other cart items (reduce splits)
     const existingStore = sorted.find(
-      (s) =>
-        storeAssignments.has(s.storeId) &&
-        s.quantity >= item.quantity
+      (s) => storeAssignments.has(s.storeId) && s.quantity >= item.quantity,
     );
-
-    const chosenStore = existingStore ?? sorted.find((s) => s.quantity >= item.quantity) ?? sorted[0];
+    const chosenStore =
+      existingStore ?? sorted.find((s) => s.quantity >= item.quantity) ?? sorted[0];
 
     const set = storeAssignments.get(chosenStore.storeId) ?? new Set();
     set.add(item.sku);
     storeAssignments.set(chosenStore.storeId, set);
 
-    return { ...item, storeStock: item.storeStock }; // storeStock unchanged; split uses first-pass store
+    return { ...item, storeStock: item.storeStock };
   });
 }
 
@@ -101,15 +111,15 @@ function assignStoresToItems(
  */
 export async function validateCart(
   rawItems: { sku: string; quantity: number }[],
-  profile?: CustomerProfile
+  profile?: CustomerProfile,
 ): Promise<ValidatedCart> {
   if (rawItems.length === 0) {
     return {
       items: [],
       splits: [],
-      grandTotalEx: 0,
-      grandMvaAmount: 0,
-      grandTotalInc: 0,
+      grandTotalEx: "0",
+      grandMvaAmount: "0",
+      grandTotalInc: "0",
       isMultiStore: false,
       hasStockWarnings: false,
     };
@@ -152,7 +162,7 @@ export async function validateCart(
   }));
   const activePromotions = await getActivePromotionsForProducts(
     productInputs,
-    customerType
+    customerType,
   );
 
   // 3. Build validated items
@@ -183,6 +193,10 @@ export async function validateCart(
       activePromotions,
     });
 
+    // Line totals: per-line × integer qty is exact, no rounding.
+    const lineTotalEx = priced.priceEx.mul(qty) as Money;
+    const lineTotalInc = priced.priceInc.mul(qty) as Money;
+
     validatedItems.push({
       productId: product.id,
       sku: product.sku,
@@ -192,14 +206,14 @@ export async function validateCart(
       categoryId: product.categoryId,
       minimumOrderQuantity: product.minimumOrderQuantity,
       quantity: qty,
-      priceEx: priced.priceEx,
-      priceInc: priced.priceInc,
-      mvaRate: priced.mvaRate,
-      discountPct: priced.discountPct,
+      priceEx: priced.priceEx.toString(),
+      priceInc: priced.priceInc.toString(),
+      mvaRate: priced.mvaRate.toString(),
+      discountPct: priced.discountPct.toString(),
       discountSource: priced.discountSource,
       promotionId: priced.promotionId,
-      lineTotalEx: roundPrice(priced.priceEx * qty),
-      lineTotalInc: roundPrice(priced.priceInc * qty),
+      lineTotalEx: lineTotalEx.toString(),
+      lineTotalInc: lineTotalInc.toString(),
       availableStock,
       stockWarning: qty > availableStock,
       storeStock,
@@ -210,25 +224,33 @@ export async function validateCart(
   const itemsWithStore = assignStoresToItems(validatedItems);
 
   // 5. Split by store
-  // Build a map of sku → best store for this cart session
   const storeMap = new Map<string, { storeId: string; storeName: string }>();
   for (const item of itemsWithStore) {
     if (item.storeStock.length === 0) continue;
-    // Pick the store with most stock, preferring already-used stores
     const existing = [...storeMap.values()];
     const preferredStoreIds = new Set(existing.map((s) => s.storeId));
 
     const sorted = [...item.storeStock].sort((a, b) => b.quantity - a.quantity);
     const chosen =
-      sorted.find((s) => preferredStoreIds.has(s.storeId) && s.quantity >= item.quantity) ??
+      sorted.find(
+        (s) => preferredStoreIds.has(s.storeId) && s.quantity >= item.quantity,
+      ) ??
       sorted.find((s) => s.quantity >= item.quantity) ??
       sorted[0];
 
     storeMap.set(item.sku, { storeId: chosen.storeId, storeName: chosen.storeName });
   }
 
-  // Group items by assigned store
-  const splitMap = new Map<string, CartStoreSplit>();
+  // 6. Group items by assigned store, summing in Decimal.
+  interface SplitAccumulator {
+    storeId: string;
+    storeName: string;
+    items: ValidatedCartItem[];
+    subtotalEx: Prisma.Decimal;
+    mvaAmount: Prisma.Decimal;
+    totalInc: Prisma.Decimal;
+  }
+  const splitMap = new Map<string, SplitAccumulator>();
   for (const item of itemsWithStore) {
     const assignment = storeMap.get(item.sku);
     if (!assignment) continue;
@@ -239,22 +261,39 @@ export async function validateCart(
         storeId,
         storeName,
         items: [],
-        subtotalEx: 0,
-        mvaAmount: 0,
-        totalInc: 0,
+        subtotalEx: new D(0),
+        mvaAmount: new D(0),
+        totalInc: new D(0),
       });
     }
     const split = splitMap.get(storeId)!;
     split.items.push(item);
-    split.subtotalEx = roundPrice(split.subtotalEx + item.lineTotalEx);
-    split.mvaAmount = roundPrice(split.mvaAmount + (item.lineTotalInc - item.lineTotalEx));
-    split.totalInc = roundPrice(split.totalInc + item.lineTotalInc);
+
+    const lineEx = new D(item.lineTotalEx);
+    const lineInc = new D(item.lineTotalInc);
+    split.subtotalEx = split.subtotalEx.plus(lineEx);
+    split.mvaAmount = split.mvaAmount.plus(lineInc.minus(lineEx));
+    split.totalInc = split.totalInc.plus(lineInc);
   }
 
-  const splits = [...splitMap.values()];
-  const grandTotalEx = roundPrice(splits.reduce((s, sp) => s + sp.subtotalEx, 0));
-  const grandMvaAmount = roundPrice(splits.reduce((s, sp) => s + sp.mvaAmount, 0));
-  const grandTotalInc = roundPrice(splits.reduce((s, sp) => s + sp.totalInc, 0));
+  const splits: CartStoreSplit[] = [...splitMap.values()].map((acc) => ({
+    storeId: acc.storeId,
+    storeName: acc.storeName,
+    items: acc.items,
+    subtotalEx: acc.subtotalEx.toString(),
+    mvaAmount: acc.mvaAmount.toString(),
+    totalInc: acc.totalInc.toString(),
+  }));
+
+  const grandTotalEx = splits
+    .reduce((s, sp) => s.plus(sp.subtotalEx), new D(0))
+    .toString();
+  const grandMvaAmount = splits
+    .reduce((s, sp) => s.plus(sp.mvaAmount), new D(0))
+    .toString();
+  const grandTotalInc = splits
+    .reduce((s, sp) => s.plus(sp.totalInc), new D(0))
+    .toString();
 
   return {
     items: itemsWithStore,
@@ -273,12 +312,12 @@ export async function validateCart(
  */
 export async function getSingleItemPricing(
   sku: string,
-  profile?: CustomerProfile
+  profile?: CustomerProfile,
 ): Promise<{
-  priceEx: number;
-  priceInc: number;
-  mvaRate: number;
-  discountPct: number;
+  priceEx: string;
+  priceInc: string;
+  mvaRate: string;
+  discountPct: string;
   discountSource: string;
   promotionId?: string;
   availableStock: number;
@@ -300,8 +339,15 @@ export async function getSingleItemPricing(
 
   const customerType = profile?.customerType ?? CustomerType.CONSUMER;
   const activePromotions = await getActivePromotionsForProducts(
-    [{ productId: product.id, sku: product.sku, categoryId: product.categoryId, brand: product.brand }],
-    customerType
+    [
+      {
+        productId: product.id,
+        sku: product.sku,
+        categoryId: product.categoryId,
+        brand: product.brand,
+      },
+    ],
+    customerType,
   );
 
   const priced = calculatePrice({
@@ -319,10 +365,10 @@ export async function getSingleItemPricing(
   const availableStock = product.stock.reduce((sum, s) => sum + s.quantity, 0);
 
   return {
-    priceEx: priced.priceEx,
-    priceInc: priced.priceInc,
-    mvaRate: priced.mvaRate,
-    discountPct: priced.discountPct,
+    priceEx: priced.priceEx.toString(),
+    priceInc: priced.priceInc.toString(),
+    mvaRate: priced.mvaRate.toString(),
+    discountPct: priced.discountPct.toString(),
     discountSource: priced.discountSource,
     promotionId: priced.promotionId,
     availableStock,

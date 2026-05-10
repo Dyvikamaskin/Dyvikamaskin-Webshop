@@ -13,11 +13,11 @@ interface AddToCartButtonProps {
   categoryId: string | null;
   minimumOrderQuantity: number;
   availableStock: number;
-  /** Pre-calculated price shown on the page — used as optimistic snapshot */
-  initialPriceEx: number;
-  initialPriceInc: number;
-  initialMvaRate: number;
-  initialDiscountPct: number;
+  /** Pre-calculated price shown on the page — used as optimistic snapshot. Decimal-formatted strings. */
+  initialPriceEx: string;
+  initialPriceInc: string;
+  initialMvaRate: string;
+  initialDiscountPct: string;
   initialDiscountSource: string;
 }
 

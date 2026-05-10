@@ -72,7 +72,7 @@ export async function createPhoneOrderAction(
   // Validate cart (pricing + stock)
   const validated = await validateCart(items, {
     customerType: customer.customerType as CustomerType,
-    defaultDiscount: customer.defaultDiscount.toNumber(),
+    defaultDiscount: customer.defaultDiscount,
   });
 
   if (validated.splits.length === 0) {

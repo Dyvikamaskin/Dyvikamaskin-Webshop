@@ -6,6 +6,7 @@
  *
  * Docs: https://developer.vippsmobilepay.com/docs/APIs/epayment-api/
  */
+import { Prisma } from "@/app/generated/prisma/client";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -210,11 +211,17 @@ export async function refundVippsPayment(
 }
 
 /**
- * Convert a NOK decimal to Vipps øre (integer).
+ * Convert a NOK amount to Vipps øre (integer).
  * Example: 149.90 NOK → 14990 øre
+ *
+ * Per the always-on rules, money crosses process boundaries in øre.
+ * Conversion is done in Decimal so we never round-trip through float.
  */
-export function toOre(nok: number): number {
-  return Math.round(nok * 100);
+export function toOre(
+  nok: Prisma.Decimal | string | number,
+): number {
+  const d = nok instanceof Prisma.Decimal ? nok : new Prisma.Decimal(nok);
+  return d.mul(100).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP).toNumber();
 }
 
 /**

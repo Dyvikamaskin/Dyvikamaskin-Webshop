@@ -280,7 +280,7 @@ export default async function ProductPage({ params }: PageProps) {
                   {formatPrice(priced.priceInc)} inkl. MVA
                 </p>
                 <p style={{ fontSize: "0.8125rem", color: "#666" }}>
-                  hvorav MVA {Math.round(priced.mvaRate * 100)}%:{" "}
+                  hvorav MVA {priced.mvaRate.mul(100).toDecimalPlaces(0).toString()}%:{" "}
                   {formatPrice(priced.mvaAmount)}
                 </p>
               </>
@@ -295,7 +295,7 @@ export default async function ProductPage({ params }: PageProps) {
               </>
             )}
 
-            {priced.discountPct > 0 && (
+            {priced.discountPct.gt(0) && (
               <p
                 style={{
                   marginTop: "0.375rem",
@@ -333,10 +333,10 @@ export default async function ProductPage({ params }: PageProps) {
             categoryId={product.categoryId}
             minimumOrderQuantity={product.minimumOrderQuantity}
             availableStock={product.totalStock}
-            initialPriceEx={priced.priceEx}
-            initialPriceInc={priced.priceInc}
-            initialMvaRate={priced.mvaRate}
-            initialDiscountPct={priced.discountPct}
+            initialPriceEx={priced.priceEx.toString()}
+            initialPriceInc={priced.priceInc.toString()}
+            initialMvaRate={priced.mvaRate.toString()}
+            initialDiscountPct={priced.discountPct.toString()}
             initialDiscountSource={priced.discountSource}
           />
 
