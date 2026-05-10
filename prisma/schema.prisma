@@ -33,8 +33,12 @@ enum CustomerType {
 
 enum OrderStatus {
   PENDING
-  PAID
-  INVOICED
+  AUTHORIZED      // Vipps reservation succeeded; awaiting dispatch (Phase 3)
+  PAID            // Captured / paid in full
+  INVOICED        // Invoice issued, awaiting bank payment
+  REFUNDED        // Full or partial refund settled (Phase 3)
+  CANCELLED       // Authorization cancelled or order voided pre-capture (Phase 3)
+  AWAITING_STOCK  // Sale taken but stock backordered (Phase 3 / used by Phase 8 backorder workflow)
 }
 
 enum FulfillmentStatus {
@@ -196,9 +200,10 @@ model Store {
   staff             StoreStaff[]
   stock             StoreStock[]
   sales             Sale[]
-  transfersFrom     StockTransfer[]  @relation("TransferFrom")
-  transfersTo       StockTransfer[]  @relation("TransferTo")
+  transfersFrom     StockTransfer[]    @relation("TransferFrom")
+  transfersTo       StockTransfer[]    @relation("TransferTo")
   stocktakeSessions StocktakeSession[]
+  reservations      StockReservation[]
 }
 
 model StoreStaff {
@@ -260,6 +265,7 @@ model Product {
   priceHistory   PriceHistory[]
   stockTransfers StockTransfer[]
   stocktakeItems StocktakeItem[]
+  reservations   StockReservation[]
   fitments              ProductFitment[]
   fitmentProposals      FitmentProposal[]
   enrichmentProposal    ProductEnrichmentProposal?
@@ -380,12 +386,18 @@ model Sale {
   paidAt            DateTime?
   invoiceDueDate    DateTime?
   shippedAt         DateTime?
+  // ─── Phase 3: Vipps capture-on-dispatch ─────────────────────────────────
+  vippsReference    String?           // Vipps payment reference; mirrors checkoutSessionId today, kept distinct so future capture-only reconciliation has a stable handle
+  authorizedAt      DateTime?         // When Vipps confirmed AUTHORIZED via webhook
+  capturedAt        DateTime?         // When captureSaleOnDispatch completed
+  capturedAmount    Decimal?          // Amount actually captured (may differ from totalPrice if partial fulfilment)
 
-  customer       Profile?       @relation("CustomerSales", fields: [customerId], references: [id])
-  createdByAdmin Profile?       @relation("AdminSales", fields: [createdByAdminId], references: [id])
-  store          Store          @relation(fields: [storeId], references: [id])
-  items          SaleItem[]
-  notifications  Notification[]
+  customer        Profile?           @relation("CustomerSales", fields: [customerId], references: [id])
+  createdByAdmin  Profile?           @relation("AdminSales", fields: [createdByAdminId], references: [id])
+  store           Store              @relation(fields: [storeId], references: [id])
+  items           SaleItem[]
+  notifications   Notification[]
+  reservations    StockReservation[]
 }
 
 model SaleItem {
@@ -423,6 +435,30 @@ model StockTransfer {
   toStore       Store   @relation("TransferTo", fields: [toStoreId], references: [id])
   product       Product @relation(fields: [productId], references: [id])
   transferredBy Profile @relation(fields: [transferredById], references: [id])
+}
+
+// ─── Stock reservations (Phase 3) ─────────────────────────────────────────
+//
+// One row per (sale, product, store) at checkout. Soft-holds stock for the
+// payment window. Released on capture/cancel/expiry. The cron sweep at
+// /api/jobs/expire-reservations deletes rows past expiresAt.
+model StockReservation {
+  id        String   @id @default(cuid())
+  saleId    String?  // null while in PENDING (no Sale row yet); filled once Sale exists
+  productId String
+  storeId   String
+  quantity  Int
+  sessionId String   // Sale.checkoutSessionId — survives across PENDING → AUTHORIZED → CAPTURED
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  sale    Sale?   @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  product Product @relation(fields: [productId], references: [id])
+  store   Store   @relation(fields: [storeId], references: [id])
+
+  @@index([productId, storeId, expiresAt])
+  @@index([sessionId])
+  @@index([expiresAt])
 }
 
 model StocktakeSession {

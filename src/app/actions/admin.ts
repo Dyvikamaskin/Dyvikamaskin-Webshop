@@ -6,6 +6,7 @@ import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { buildLocationCode } from "@/lib/location-code";
 import { notifyShipped, notifyReadyForPickup } from "@/lib/notification-service";
+import { captureSaleOnDispatch } from "@/services/payments/vipps";
 import {
   UserRole,
   OrderStatus,
@@ -29,14 +30,33 @@ export async function updateFulfillmentStatusAction(
 
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
-    select: { fulfillmentStatus: true },
+    select: { fulfillmentStatus: true, shippedAt: true },
   });
 
   if (!sale) return { ok: false, error: "Ordre ikke funnet." };
 
+  // Dispatch transitions trigger capture-on-dispatch (Phase 3): consume
+  // stock, release reservations, and capture the Vipps payment if this sale
+  // came in via Vipps. This must succeed before the fulfillmentStatus row
+  // is updated — otherwise we'd ship a parcel without charging the customer.
+  const isDispatchTransition =
+    !sale.shippedAt &&
+    (fulfillmentStatus === FulfillmentStatus.SHIPPED ||
+      fulfillmentStatus === FulfillmentStatus.READY_FOR_PICKUP);
+
+  if (isDispatchTransition) {
+    const dispatch = await captureSaleOnDispatch(saleId);
+    if (!dispatch.ok) {
+      return { ok: false, error: dispatch.error };
+    }
+  }
+
   await prisma.sale.update({
     where: { id: saleId },
-    data: { fulfillmentStatus },
+    data: {
+      fulfillmentStatus,
+      ...(isDispatchTransition ? { shippedAt: new Date() } : {}),
+    },
   });
 
   await logAudit(
@@ -45,7 +65,7 @@ export async function updateFulfillmentStatusAction(
     "Sale",
     saleId,
     { fulfillmentStatus: sale.fulfillmentStatus },
-    { fulfillmentStatus }
+    { fulfillmentStatus },
   );
 
   // Fire notifications (non-blocking)

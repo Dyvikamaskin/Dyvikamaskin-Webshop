@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { bookShipment, fetchLabelPdf } from "@/lib/mybring";
 import { getAuthUser } from "@/lib/auth";
+import { captureSaleOnDispatch } from "@/services/payments/vipps";
 import { UserRole, FulfillmentStatus } from "@/app/generated/prisma/enums";
 
 // ─── Auth helper (API-safe — returns JSON, not redirect) ─────────────────────
@@ -168,6 +169,16 @@ export async function POST(
       dimensions: body.dimensions,
       testMode: body.testMode ?? false,
     });
+
+    // ── Capture-on-dispatch (Phase 3) ───────────────────────────────────────
+    // Booking the shipping label IS the dispatch event. Capture the Vipps
+    // payment (if applicable), decrement stock, and release reservations
+    // before persisting the tracking info — that way the customer never
+    // gets shipped goods we haven't charged for.
+    const dispatch = await captureSaleOnDispatch(saleId);
+    if (!dispatch.ok) {
+      return NextResponse.json({ error: dispatch.error }, { status: 502 });
+    }
 
     // ── Persist tracking info ──────────────────────────────────────────────────
     await prisma.sale.update({

@@ -291,7 +291,16 @@ function formatNok(value: { toString(): string } | null | undefined) {
 }
 
 function statusLabel(s: OrderStatus): string {
-  return { PENDING: "Venter", PAID: "Betalt", INVOICED: "Fakturert" }[s] ?? s;
+  const labels: Record<OrderStatus, string> = {
+    PENDING: "Venter",
+    AUTHORIZED: "Reservert",
+    PAID: "Betalt",
+    INVOICED: "Fakturert",
+    REFUNDED: "Refundert",
+    CANCELLED: "Avbrutt",
+    AWAITING_STOCK: "Venter på lager",
+  };
+  return labels[s] ?? s;
 }
 
 function fulfillmentLabel(s: FulfillmentStatus): string {

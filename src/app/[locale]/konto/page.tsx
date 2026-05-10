@@ -12,8 +12,12 @@ export const metadata: Metadata = {
 
 const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: "Venter på betaling",
+  AUTHORIZED: "Reservert — venter på sending",
   PAID: "Betalt",
   INVOICED: "Fakturert",
+  REFUNDED: "Refundert",
+  CANCELLED: "Avbrutt",
+  AWAITING_STOCK: "Venter på lager",
 };
 
 const FULFILLMENT_LABEL: Record<FulfillmentStatus, string> = {
