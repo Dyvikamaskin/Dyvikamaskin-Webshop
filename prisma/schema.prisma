@@ -115,6 +115,34 @@ enum ProductDraftStatus {
   REJECTED
 }
 
+// ─── Phase 7 — Returns + Quotes ──────────────────────────────────────────────
+
+enum ReturnRequestStatus {
+  PENDING        // Customer submitted, awaiting admin review
+  APPROVED       // Admin approved; goods expected
+  RECEIVED       // Goods arrived, refund pending
+  REFUNDED       // Refund processed (full or partial)
+  REJECTED       // Admin rejected the return
+}
+
+enum ReturnReason {
+  WRONG_ITEM            // Customer received the wrong product
+  DEFECTIVE             // Product arrived faulty (Forbrukerkjøpsloven §15-17)
+  NOT_AS_DESCRIBED      // Mismatch vs storefront description
+  DAMAGED_IN_TRANSIT    // Shipping damage
+  CHANGED_MIND          // §22 Angrerett — 14-day cooling-off period
+  OTHER
+}
+
+enum QuoteStatus {
+  DRAFT         // Created but not sent
+  SENT          // Emailed to the customer
+  ACCEPTED      // Customer accepted — eligible for conversion
+  REJECTED      // Customer declined
+  EXPIRED       // Past validUntil
+  CONVERTED     // Already turned into a Sale
+}
+
 enum ProductRequestStatus {
   PENDING
   IN_ENRICHMENT
@@ -196,6 +224,8 @@ model Profile {
   draftReviews        ProductDraft[]    @relation("DraftReviewer")
   productRequests     ProductRequest[]
   savedMachines       SavedMachine[]
+  returnRequests      ReturnRequest[]    @relation("CustomerReturns")
+  quotes              Quote[]            @relation("CustomerQuotes")
 }
 
 model Store {
@@ -217,6 +247,7 @@ model Store {
   transfersTo       StockTransfer[]    @relation("TransferTo")
   stocktakeSessions StocktakeSession[]
   reservations      StockReservation[]
+  quotes            Quote[]
 }
 
 model StoreStaff {
@@ -300,6 +331,7 @@ model Product {
   fitments              ProductFitment[]
   fitmentProposals      FitmentProposal[]
   enrichmentProposal    ProductEnrichmentProposal?
+  quoteItems            QuoteItem[]
 }
 
 // â”€â”€â”€ Machine fitment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -429,6 +461,8 @@ model Sale {
   items           SaleItem[]
   notifications   Notification[]
   reservations    StockReservation[]
+  returnRequests  ReturnRequest[]
+  convertedFromQuote Quote?          @relation("ConvertedQuote")
 }
 
 model SaleItem {
@@ -447,9 +481,102 @@ model SaleItem {
   promotionId           String?
   discountPercentage    Decimal        @default(0)
 
-  sale      Sale       @relation(fields: [saleId], references: [id])
-  product   Product    @relation(fields: [productId], references: [id])
-  promotion Promotion? @relation(fields: [promotionId], references: [id])
+  sale        Sale         @relation(fields: [saleId], references: [id])
+  product     Product      @relation(fields: [productId], references: [id])
+  promotion   Promotion?   @relation(fields: [promotionId], references: [id])
+  returnItems ReturnItem[]
+}
+
+// ─── Phase 7 — Returns ──────────────────────────────────────────────────────
+
+model ReturnRequest {
+  id                   String              @id @default(cuid())
+  saleId               String
+  customerId           String?
+  reason               ReturnReason
+  notes                String?             // free-text from the customer
+  adminNotes           String?             // internal review notes
+  status               ReturnRequestStatus @default(PENDING)
+  refundAmount         Decimal?            // amount refunded (may be partial)
+  vippsRefundReference String?             // Vipps refund psp reference
+
+  createdAt            DateTime            @default(now())
+  approvedAt           DateTime?
+  receivedAt           DateTime?
+  refundedAt           DateTime?
+  rejectedAt           DateTime?
+
+  sale     Sale         @relation(fields: [saleId], references: [id])
+  customer Profile?     @relation("CustomerReturns", fields: [customerId], references: [id])
+  items    ReturnItem[]
+
+  @@index([saleId])
+  @@index([customerId])
+  @@index([status, createdAt])
+}
+
+model ReturnItem {
+  id              String  @id @default(cuid())
+  returnRequestId String
+  saleItemId      String
+  quantity        Int
+
+  returnRequest ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  saleItem      SaleItem      @relation(fields: [saleItemId], references: [id])
+
+  @@unique([returnRequestId, saleItemId])
+}
+
+// ─── Phase 7 — Quotes ───────────────────────────────────────────────────────
+//
+// Quotes are pre-sale price proposals — typically B2B "Be om tilbud" flow.
+// Line snapshots match SaleItem so converting to a Sale is a pure copy.
+// Auto-numbered "Q-YYYY-NNNNNN" via a counter row in InvoiceCounter (or a
+// sibling pattern; for v1 we use a simple year+sequence string).
+model Quote {
+  id              String      @id @default(cuid())
+  quoteNumber     String      @unique
+  customerId      String?
+  customerEmail   String
+  customerName    String?
+  customerCompany String?
+  storeId         String
+  status          QuoteStatus @default(DRAFT)
+  subtotalExclMva Decimal
+  mvaAmount       Decimal
+  totalPrice      Decimal
+  validUntil      DateTime?
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  sentAt          DateTime?
+  acceptedAt      DateTime?
+  rejectedAt      DateTime?
+  convertedSaleId String?   @unique // FK -> Sale once the quote becomes an order
+
+  customer        Profile?  @relation("CustomerQuotes", fields: [customerId], references: [id])
+  store           Store     @relation(fields: [storeId], references: [id])
+  items           QuoteItem[]
+  convertedSale   Sale?     @relation("ConvertedQuote", fields: [convertedSaleId], references: [id])
+
+  @@index([status, createdAt])
+}
+
+model QuoteItem {
+  id               String  @id @default(cuid())
+  quoteId          String
+  productId        String
+  sku              String
+  productName      String  // snapshot
+  quantity         Int
+  unitPriceExclMva Decimal
+  mvaRate          Decimal
+  lineTotalExclMva Decimal
+  lineTotalInclMva Decimal
+
+  quote   Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 }
 
 model StockTransfer {

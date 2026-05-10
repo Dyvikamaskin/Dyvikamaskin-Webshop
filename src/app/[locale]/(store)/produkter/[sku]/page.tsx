@@ -346,6 +346,21 @@ export default async function ProductPage({ params }: PageProps) {
             </p>
           )}
 
+          {/* Be om tilbud CTA — Phase 7. Shown to B2B customers and to anyone
+              who needs bulk pricing. Routes to the public quote-request page
+              with the SKU pre-loaded. */}
+          {customerType === "BUSINESS" && (
+            <p style={{ marginTop: "0.75rem", fontSize: "0.875rem", color: "#475569" }}>
+              Trenger du større volum?{" "}
+              <Link
+                href={`/info/tilbud?sku=${encodeURIComponent(product.sku)}`}
+                style={{ color: "#0f172a", fontWeight: 600, textDecoration: "underline" }}
+              >
+                Be om tilbud →
+              </Link>
+            </p>
+          )}
+
           {/* Meta */}
           <dl
             style={{
