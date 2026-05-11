@@ -26,13 +26,15 @@ is live. Deploy `ebe67970` (11 May 10:21 +02:00) = SUCCESS.
 
 ## This session's deltas (skim before starting work)
 
-Three small follow-ons landed:
+Five small follow-ons landed:
 
 | Commit | What |
 |---|---|
 | `1255f75` | Customer-facing product gallery (hero + thumbnails) + tags exposed as `<meta keywords>` + JSON-LD Product schema on PDP. `mainImage` moved out of admin-only fieldset into a public "Bilder" group. |
 | `ace9276` | `Privat | Bedrift` segmented toggle in the TopBar — only for anonymous guests. Pure cookie flip via existing `setCustomerTypeAction` (no BRREG lookup). Hidden for authenticated users. Reload after flip so server-rendered prices refresh. |
 | `292dd21` | Admin overview: new `Bruttofortjeneste (estimat)` row beneath Omsetning showing margin in kr + % per period (I dag / Denne uka / Denne mnd). Footnote when not 100 % of items have `purchasePrice`. Existing Omsetning flipped from `totalPrice` (incl. MVA) to `subtotalExclMva` (ex-MVA) — the old label was technically misleading in Norwegian accounting terms. |
+| `bc05e8f` | Lint cleanup. 11 in-app `<a href>` migrations to `next/link` (CookieConsentBanner, LoginForm, RegisterForm, ForgotPasswordForm, info/deletyper, produkter/[sku] breadcrumb, admin overview "Se alle" links, admin produktforslag back-link, _NyttProduktForm). One `/api/exports/low-stock` `<a>` kept with eslint-disable + explainer (file download, not page nav). Plus `eslint --fix` autofix pass. Lint problem count 273 → 155. |
+| `a408c21` | **Chrome refresh.** Red Dyvikamaskin logo (321×98 PNG, displayed at 118×36 via `next/image` with `loading="eager"` + `fetchPriority="high"`) replaces the text wordmark in TopBar. VELG LAGER button dropped from PrimaryNav. Three logo files committed to `public/brand/`. Locked-in product decision: chrome stays two-row white, no dark utility bar. |
 
 ## Operational status (verified 11 May 2026)
 
@@ -70,12 +72,13 @@ Three small follow-ons landed:
 
 | Order | Branch | Scope | Reference |
 |---|---|---|---|
-| 1 | `phase-globalize-topbar` | Logo asset, route group `(store)` → `(customer)`, EntryModal mount shift, TopBar logo swap, cached drawer fetchers | `v4.2-redesign-plan.md` §PR 1 |
+| 1 | `phase-globalize-topbar` | Route group `(store)` → `(customer)`, 6 folder moves into it, EntryModal mount shift, cached drawer fetchers. **No chrome work — already shipped (`a408c21`).** | `v4.2-redesign-plan.md` §PR 1 |
 | 2 | `phase-desktop-drawer` | Cascading multi-pane drawer on `≥md`, mobile keeps stack/push | `v4.2-redesign-plan.md` §PR 2 |
-| 3 | `phase-design-homepage` | Tokens, marketing components, homepage cutover, Kampanjer + Outlet placeholders | `v4.2-redesign-plan.md` §PR 3 |
+| 3 | `phase-design-homepage` | Tokens, marketing components for homepage **body only** (chrome unchanged), Kampanjer + Outlet placeholders | `v4.2-redesign-plan.md` §PR 3 |
 
-Total estimated time: ~7 h 30 min. Each PR is independent — you can
-stop after any of them and ship.
+Total estimated time: ~6 h 45 min (down from ~7 h 30 min after the
+chrome refresh shipped early as `a408c21`). Each PR is independent —
+you can stop after any of them and ship.
 
 ## Earlier session's deltas (for context)
 
@@ -100,13 +103,17 @@ For deep context read these in order:
 
 ## Where the code is
 
-`main` HEAD: `292dd21 feat(admin-overview): gross margin tiles + flip Omsetning to ex-MVA`.
+`main` HEAD: `a408c21 feat(chrome): red logo in TopBar + drop VELG LAGER from PrimaryNav`.
 Production Railway tracks `main` and is live with everything below.
-Last deploy: `ebe67970` SUCCESS at 11 May 10:21 +02:00.
+Last deploy: `017a9e98` SUCCESS at 11 May 13:59 +02:00.
 
 Recent commits on `main` (newest first):
 
 ```
+a408c21 feat(chrome): red logo in TopBar + drop VELG LAGER from PrimaryNav
+6d3d3c7 docs: pin logo dims, record VIPPS verification, backup + cron status
+bc05e8f chore(lint): a-href → Link migration + autofix sweep
+70e10b1 docs: refresh handoff + add v4.2 storefront redesign plan
 292dd21 feat(admin-overview): gross margin tiles + flip Omsetning to ex-MVA
 ace9276 feat(customer-type): Privat | Bedrift toggle in TopBar for guests
 1255f75 feat(product-visibility): customer gallery + SEO-only tags
