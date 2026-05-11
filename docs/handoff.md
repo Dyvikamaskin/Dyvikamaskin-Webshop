@@ -26,7 +26,7 @@ is live. Deploy `ebe67970` (11 May 10:21 +02:00) = SUCCESS.
 
 ## This session's deltas (skim before starting work)
 
-Five small follow-ons landed:
+Seven small follow-ons landed:
 
 | Commit | What |
 |---|---|
@@ -36,6 +36,7 @@ Five small follow-ons landed:
 | `bc05e8f` | Lint cleanup. 11 in-app `<a href>` migrations to `next/link` (CookieConsentBanner, LoginForm, RegisterForm, ForgotPasswordForm, info/deletyper, produkter/[sku] breadcrumb, admin overview "Se alle" links, admin produktforslag back-link, _NyttProduktForm). One `/api/exports/low-stock` `<a>` kept with eslint-disable + explainer (file download, not page nav). Plus `eslint --fix` autofix pass. Lint problem count 273 → 155. |
 | `a408c21` | **Chrome refresh.** Red Dyvikamaskin logo (321×98 PNG, displayed at 118×36 via `next/image` with `loading="eager"` + `fetchPriority="high"`) replaces the text wordmark in TopBar. VELG LAGER button dropped from PrimaryNav. Three logo files committed to `public/brand/`. Locked-in product decision: chrome stays two-row white, no dark utility bar. |
 | `f1eb858` | **Manual backup trigger.** New "Kjør sikkerhetskopi nå" button on `/admin/backup/setup` enqueues a one-off `daily-backup` job to the maintenance queue — same code path as the 02:00 UTC cron. Polls every 2 s for the resulting `BackupRun` row and surfaces SUCCESS / SKIPPED / FAILED with size + duration + storage path. Verified end-to-end (68 KB, 2 s, real artifact in Supabase Storage). |
+| `d73171c` | **Admin sidebar discoverability.** Added "🔐 Sikkerhetskopi" link to the admin sidebar's `NAV_LINKS` array, slotted between Butikkinnstillinger and the Rapporter & eksport section. Page is still SUPER_ADMIN-gated — a STORE_MANAGER clicking the link will be redirected to `/login`. Role-aware sidebar filtering is parked as a follow-up. |
 
 ## Operational status (verified 11 May 2026)
 
@@ -107,13 +108,15 @@ For deep context read these in order:
 
 ## Where the code is
 
-`main` HEAD: `f1eb858 feat(backup): "Kjør sikkerhetskopi nå" trigger on /admin/backup/setup`.
+`main` HEAD: `d73171c chore(admin-nav): link /admin/backup/setup from the sidebar`.
 Production Railway tracks `main` and is live with everything below.
-Last deploy: `31c31068` SUCCESS at 11 May 14:21 +02:00.
+Last deploy: `e548598e` SUCCESS at 11 May 14:32 +02:00.
 
 Recent commits on `main` (newest first):
 
 ```
+d73171c chore(admin-nav): link /admin/backup/setup from the sidebar
+6d5a2aa docs: handoff — backup pipeline verified end-to-end
 f1eb858 feat(backup): "Kjør sikkerhetskopi nå" trigger on /admin/backup/setup
 36be766 docs: shrink v4.2 plan after early chrome refresh (a408c21)
 a408c21 feat(chrome): red logo in TopBar + drop VELG LAGER from PrimaryNav
