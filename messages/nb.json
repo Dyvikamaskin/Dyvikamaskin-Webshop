@@ -93,8 +93,11 @@
   "customerType": {
     "consumer": "Privatkunde",
     "business": "Bedrift",
+    "private": "Privat",
     "selectType": "Velg kundetype",
     "consumerDescription": "Privatkunde — pris inkl. MVA",
-    "businessDescription": "Bedriftskunde — pris eks. MVA"
+    "businessDescription": "Bedriftskunde — pris eks. MVA",
+    "toggleLabel": "Kundetype",
+    "toggleTooltip": "Privat viser priser inkl. MVA. Bedrift viser priser eks. MVA."
   }
 }

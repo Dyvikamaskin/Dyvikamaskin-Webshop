@@ -4,11 +4,13 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { AccountMenu } from "@/components/layout/AccountMenu";
 import { SearchBar } from "@/components/layout/SearchBar";
+import { CustomerTypeToggle } from "@/components/layout/CustomerTypeToggle";
 import {
   HamburgerButton,
   ScannerButton,
   CartLink,
 } from "@/components/layout/TopBarActions";
+import type { CustomerTypeValue } from "@/lib/stores/use-customer-type";
 
 /**
  * TopBar — Phase 0.5
@@ -27,6 +29,7 @@ export default async function TopBar() {
 
   let userName: string | null = null;
   let userRole: string | null = null;
+  let isAuthenticated = false;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -41,6 +44,7 @@ export default async function TopBar() {
       } = await supabase.auth.getUser();
 
       if (user) {
+        isAuthenticated = true;
         const profile = await prisma.profile.findUnique({
           where: { id: user.id },
           select: { fullName: true, role: true },
@@ -52,6 +56,13 @@ export default async function TopBar() {
       // Auth unavailable — fall through to guest view.
     }
   }
+
+  // Customer-type toggle: only rendered for anonymous visitors. Logged-in
+  // users have a locked audience on their Profile and change it via
+  // account settings, not the nav.
+  const rawType = cookieStore.get("customer-type")?.value;
+  const initialCustomerType: CustomerTypeValue | null =
+    rawType === "CONSUMER" || rawType === "BUSINESS" ? rawType : null;
 
   return (
     <div className="border-b border-slate-200 bg-white">
@@ -71,6 +82,10 @@ export default async function TopBar() {
         </div>
 
         <ScannerButton />
+
+        {!isAuthenticated && (
+          <CustomerTypeToggle initialType={initialCustomerType} />
+        )}
 
         <AccountMenu userName={userName} userRole={userRole} />
 
