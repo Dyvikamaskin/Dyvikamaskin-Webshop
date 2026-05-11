@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
@@ -71,10 +72,17 @@ export default async function TopBar() {
 
         <Link
           href="/"
-          className="shrink-0 text-base font-extrabold tracking-tight text-slate-900 sm:text-lg"
+          className="shrink-0"
           aria-label="Dyvikamaskin — gå til forsiden"
         >
-          Dyvikamaskin
+          <Image
+            src="/brand/dyvika-logo-red.png"
+            alt="Dyvikamaskin"
+            width={118}
+            height={36}
+            loading="eager"
+            fetchPriority="high"
+          />
         </Link>
 
         <div className="hidden flex-1 px-2 md:flex">

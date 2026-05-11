@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { PinIcon } from "@/components/layout/icons";
 
 /**
  * PrimaryNav — Phase 0.5
@@ -11,6 +10,9 @@ import { PinIcon } from "@/components/layout/icons";
  * Items are static and editable here — Phase 0.6 (dynamic categories)
  * will replace MASKINER and PRODUKTER with real data; this component
  * keeps the labels stable across phases.
+ *
+ * Note: the VELG LAGER button was removed (locked decision, v4.2) —
+ * we have one store, so the lager-picker affordance had nowhere to go.
  */
 const NAV_ITEMS: { label: string; href: string }[] = [
   { label: "PRODUKTER",     href: "/produkter" },
@@ -24,7 +26,7 @@ const NAV_ITEMS: { label: string; href: string }[] = [
 export function PrimaryNav() {
   return (
     <div className="hidden border-b border-slate-200 bg-white md:block">
-      <div className="mx-auto flex max-w-[1280px] items-center justify-between px-6">
+      <div className="mx-auto flex max-w-[1280px] items-center px-6">
         <nav>
           <ul className="flex items-center">
             {NAV_ITEMS.map((item) => (
@@ -39,14 +41,6 @@ export function PrimaryNav() {
             ))}
           </ul>
         </nav>
-
-        <Link
-          href="/info/finn-lager"
-          className="flex items-center gap-2 px-3 py-2 text-[13px] font-bold tracking-wide text-slate-900 hover:text-blue-700"
-        >
-          <PinIcon className="text-base text-blue-700" />
-          VELG LAGER
-        </Link>
       </div>
     </div>
   );

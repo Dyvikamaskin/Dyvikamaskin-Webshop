@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 160" role="img" aria-label="Dyvika Maskin icon">
+  <g transform="translate(10,10)">
+    <path d="M0 110 L0 70 Q0 60 10 60 L60 60 L72 38 L120 38 L120 60 L130 60 Q140 60 140 70 L140 110 Z" fill="#111111"></path>
+    <path d="M78 44 L116 44 L116 58 L86 58 Z" fill="#F47E1F"></path>
+    <rect x="-6" y="112" width="160" height="22" rx="11" fill="#111111"></rect>
+    <circle cx="8" cy="123" r="6" fill="#F47E1F"></circle>
+    <circle cx="40" cy="123" r="6" fill="#F47E1F"></circle>
+    <circle cx="76" cy="123" r="6" fill="#F47E1F"></circle>
+    <circle cx="112" cy="123" r="6" fill="#F47E1F"></circle>
+    <circle cx="144" cy="123" r="6" fill="#F47E1F"></circle>
+    <path d="M120 78 L220 12 L240 28 L150 96 Z" fill="#F47E1F" stroke="#111111" stroke-width="4" stroke-linejoin="round"></path>
+    <path d="M232 22 L300 92 L286 106 L218 36 Z" fill="#F47E1F" stroke="#111111" stroke-width="4" stroke-linejoin="round"></path>
+    <path d="M278 86 Q330 92 340 130 Q340 142 326 144 L290 144 Q278 144 276 132 L274 110 Q272 96 278 86 Z" fill="#111111"></path>
+    <polygon points="290,144 296,156 302,144" fill="#111111"></polygon>
+    <polygon points="304,144 310,158 316,144" fill="#111111"></polygon>
+    <polygon points="318,144 324,156 330,144" fill="#111111"></polygon>
+  </g>
+</svg>
