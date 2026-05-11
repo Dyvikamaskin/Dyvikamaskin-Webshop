@@ -19,6 +19,7 @@ const NAV_LINKS = [
   { href: "/admin/stocktake",      label: "🔢 Varetelling" },
   { href: "/admin/produktforslag", label: "🔍 Produktforslag" },
   { href: "/admin/butikk",         label: "🏪 Butikkinnstillinger" },
+  { href: "/admin/backup/setup",   label: "🔐 Sikkerhetskopi" },
   // ── Rapporter & eksport ────────────────────────────────────────────────────
   { href: "/admin/regnskap",       label: "📊 Regnskapseksport" },
   { href: "/admin/mva-rapport",    label: "🧾 MVA-rapport" },
