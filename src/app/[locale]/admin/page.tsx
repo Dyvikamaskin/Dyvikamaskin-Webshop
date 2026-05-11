@@ -31,6 +31,62 @@ function kr(val: { toNumber(): number } | number): string {
   return n.toLocaleString("nb-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 });
 }
 
+// ─── Gross margin (estimat) ───────────────────────────────────────────────────
+// COGS = quantity × Product.purchasePrice at query time (current cost, not
+// historical). Items without a purchasePrice contribute zero cost; the
+// per-period coverage ratio is surfaced as a footnote on the tile so the
+// reader knows when the figure is partial. A historical snapshot on SaleItem
+// is the audit-grade fix and is parked for a later pass.
+
+interface MarginRow {
+  revenue_ex:   string | number;
+  cogs:         string | number;
+  priced_items: bigint | number;
+  total_items:  bigint | number;
+}
+
+async function getMarginForPeriod(since: Date): Promise<{
+  revenueEx:   number;
+  cogs:        number;
+  margin:      number;
+  marginPct:   number;
+  pricedItems: number;
+  totalItems:  number;
+}> {
+  const rows = await prisma.$queryRaw<MarginRow[]>`
+    WITH paid AS (
+      SELECT id, "subtotalExclMva"
+      FROM "Sale"
+      WHERE status IN ('PAID', 'INVOICED') AND "createdAt" >= ${since}
+    ),
+    cogs AS (
+      SELECT si."saleId",
+             SUM(si.quantity * COALESCE(p."purchasePrice", 0)) AS sale_cogs,
+             SUM(CASE WHEN p."purchasePrice" IS NULL THEN 0 ELSE 1 END) AS priced_items,
+             COUNT(*) AS total_items
+      FROM "SaleItem" si
+      JOIN "Product" p ON p.id = si."productId"
+      WHERE si."saleId" IN (SELECT id FROM paid)
+      GROUP BY si."saleId"
+    )
+    SELECT
+      COALESCE(SUM(p."subtotalExclMva"), 0)::numeric AS revenue_ex,
+      COALESCE(SUM(c.sale_cogs), 0)::numeric         AS cogs,
+      COALESCE(SUM(c.priced_items), 0)::int          AS priced_items,
+      COALESCE(SUM(c.total_items), 0)::int           AS total_items
+    FROM paid p
+    LEFT JOIN cogs c ON c."saleId" = p.id;
+  `;
+  const row = rows[0];
+  const revenueEx   = row ? Number(row.revenue_ex)   : 0;
+  const cogs        = row ? Number(row.cogs)         : 0;
+  const pricedItems = row ? Number(row.priced_items) : 0;
+  const totalItems  = row ? Number(row.total_items)  : 0;
+  const margin      = revenueEx - cogs;
+  const marginPct   = revenueEx > 0 ? (margin / revenueEx) * 100 : 0;
+  return { revenueEx, cogs, margin, marginPct, pricedItems, totalItems };
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function AdminDashboardPage() {
@@ -55,6 +111,9 @@ export default async function AdminDashboardPage() {
     lowStockCount,
     recentOrders,
     recentAudit,
+    marginToday,
+    marginWeek,
+    marginMonth,
   ] = await Promise.all([
     prisma.sale.count({ where: { createdAt: { gte: today } } }),
     prisma.sale.count({ where: { status: OrderStatus.PENDING } }),
@@ -68,16 +127,21 @@ export default async function AdminDashboardPage() {
     prisma.promotion.count({ where: { isActive: true } }),
     prisma.profile.count({ where: { role: null } }),
 
+    // ── Omsetning eks. MVA (Phase: gross-margin fix-forward) ──────────────
+    // Was: _sum: { totalPrice } (incl. MVA). "Omsetning" in Norwegian
+    // accounting means net revenue ex-MVA — MVA is pass-through tax, not
+    // company revenue. Switched to subtotalExclMva so the figure matches
+    // the new Bruttofortjeneste tiles below.
     prisma.sale.aggregate({
-      _sum: { totalPrice: true },
+      _sum: { subtotalExclMva: true },
       where: { status: paidStatuses, createdAt: { gte: thisWeek } },
     }),
     prisma.sale.aggregate({
-      _sum: { totalPrice: true },
+      _sum: { subtotalExclMva: true },
       where: { status: paidStatuses, createdAt: { gte: thisMon } },
     }),
     prisma.sale.aggregate({
-      _sum: { totalPrice: true },
+      _sum: { subtotalExclMva: true },
       where: { status: paidStatuses, createdAt: { gte: today } },
     }),
 
@@ -115,11 +179,17 @@ export default async function AdminDashboardPage() {
         actor: { select: { fullName: true } },
       },
     }),
+
+    // ── Gross margin per period (raw SQL — joins Sale → SaleItem → Product
+    //    and sums quantity × purchasePrice as COGS) ──────────────────────────
+    getMarginForPeriod(today),
+    getMarginForPeriod(thisWeek),
+    getMarginForPeriod(thisMon),
   ]);
 
-  const revToday = revTodayAgg._sum.totalPrice?.toNumber() ?? 0;
-  const revWeek  = revWeekAgg._sum.totalPrice?.toNumber()  ?? 0;
-  const revMonth = revMonAgg._sum.totalPrice?.toNumber()   ?? 0;
+  const revToday = revTodayAgg._sum.subtotalExclMva?.toNumber() ?? 0;
+  const revWeek  = revWeekAgg._sum.subtotalExclMva?.toNumber()  ?? 0;
+  const revMonth = revMonAgg._sum.subtotalExclMva?.toNumber()   ?? 0;
 
   return (
     <div style={{ padding: "2rem", maxWidth: "1280px" }}>
@@ -152,12 +222,24 @@ export default async function AdminDashboardPage() {
         />
       </div>
 
-      {/* ── Stat cards — revenue ─────────────────────────────────────────────── */}
-      <h2 style={{ ...sectionTitle, marginTop: "2rem" }}>Omsetning (betalte ordrer)</h2>
+      {/* ── Stat cards — revenue (ex-MVA) ────────────────────────────────────── */}
+      <h2 style={{ ...sectionTitle, marginTop: "2rem" }}>
+        Omsetning (eks. MVA, betalte ordrer)
+      </h2>
       <div style={gridStyle}>
         <RevenueCard label="I dag"     amount={kr(revToday)} color="#0ea5e9" />
         <RevenueCard label="Denne uka" amount={kr(revWeek)}  color="#6366f1" />
         <RevenueCard label="Denne mnd" amount={kr(revMonth)} color="#ec4899" />
+      </div>
+
+      {/* ── Stat cards — gross margin (estimat) ──────────────────────────────── */}
+      <h2 style={{ ...sectionTitle, marginTop: "2rem" }}>
+        Bruttofortjeneste (estimat)
+      </h2>
+      <div style={gridStyle}>
+        <MarginCard label="I dag"     data={marginToday} color="#0ea5e9" />
+        <MarginCard label="Denne uka" data={marginWeek}  color="#6366f1" />
+        <MarginCard label="Denne mnd" data={marginMonth} color="#ec4899" />
       </div>
 
       {/* ── Recent orders ───────────────────────────────────────────────────── */}
@@ -381,6 +463,61 @@ function RevenueCard({ label, amount, color }: { label: string; amount: string; 
     >
       <p style={{ margin: 0, fontSize: "0.8rem", color: "#64748b", marginBottom: "0.4rem" }}>{label}</p>
       <p style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700, color: "#0f172a" }}>{amount}</p>
+    </div>
+  );
+}
+
+function MarginCard({
+  label,
+  data,
+  color,
+}: {
+  label: string;
+  data: {
+    margin:      number;
+    marginPct:   number;
+    pricedItems: number;
+    totalItems:  number;
+  };
+  color: string;
+}) {
+  const hasSales = data.totalItems > 0;
+  const coverage = hasSales
+    ? `${data.pricedItems} av ${data.totalItems} varer har innkjøpspris`
+    : null;
+  const pctTone =
+    data.marginPct >= 30 ? "#16a34a" : data.marginPct >= 10 ? "#0f172a" : "#dc2626";
+  return (
+    <div
+      style={{
+        background: "#fff",
+        borderRadius: "8px",
+        border: "1px solid #e2e8f0",
+        padding: "1.25rem 1.5rem",
+        borderLeft: `4px solid ${color}`,
+      }}
+    >
+      <p style={{ margin: 0, fontSize: "0.8rem", color: "#64748b", marginBottom: "0.4rem" }}>
+        {label}
+      </p>
+      <p style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700, color: "#0f172a" }}>
+        {kr(data.margin)}
+      </p>
+      <p
+        style={{
+          margin: "0.25rem 0 0",
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          color: hasSales ? pctTone : "#94a3b8",
+        }}
+      >
+        {hasSales ? `${data.marginPct.toFixed(1)} %` : "—"}
+      </p>
+      {coverage && data.pricedItems < data.totalItems && (
+        <p style={{ margin: "0.35rem 0 0", fontSize: "0.7rem", color: "#94a3b8" }}>
+          {coverage}
+        </p>
+      )}
     </div>
   );
 }
