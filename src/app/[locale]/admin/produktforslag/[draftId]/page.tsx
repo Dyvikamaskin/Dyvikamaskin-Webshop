@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { UserRole } from "@/app/generated/prisma/enums";
@@ -34,7 +35,7 @@ export default async function DraftDetailPage({ params }: Props) {
     select:  { id: true, name: true, parentId: true },
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const sources: Array<{ source: string; field: string; value: string }> =
     Array.isArray(draft.sources) ? (draft.sources as any[]) : [];
 
@@ -42,9 +43,9 @@ export default async function DraftDetailPage({ params }: Props) {
 
   return (
     <div style={{ padding: "2rem", maxWidth: "900px" }}>
-      <a href="/admin/produktforslag" style={{ color: "#64748b", fontSize: "0.85rem", textDecoration: "none" }}>
+      <Link href="/admin/produktforslag" style={{ color: "#64748b", fontSize: "0.85rem", textDecoration: "none" }}>
         ← Tilbake til produktforslag
-      </a>
+      </Link>
 
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginTop: "1rem", marginBottom: "1.5rem" }}>
         <div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createProductAction, uploadProductImageAction } from "@/app/actions/product";
 import { CategoryPicker } from "@/components/admin/CategoryPicker";
@@ -456,7 +457,7 @@ export default function NyttProduktForm({ categories }: Props) {
         <div>
           <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: "0.4rem" }}>
             Opphav
-            <a
+            <Link
               href="/info/deletyper"
               target="_blank"
               rel="noopener"
@@ -477,7 +478,7 @@ export default function NyttProduktForm({ categories }: Props) {
               }}
             >
               i
-            </a>
+            </Link>
           </label>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
             {(Object.values(PartProvenance) as PartProvenance[]).map((p) => (
@@ -879,7 +880,7 @@ export default function NyttProduktForm({ categories }: Props) {
           >
             {pending ? "Lagrer…" : "Lagre produkt"}
           </button>
-          <a
+          <Link
             href="/admin/produkter"
             style={{
               fontSize: "0.875rem",
@@ -888,7 +889,7 @@ export default function NyttProduktForm({ categories }: Props) {
             }}
           >
             Avbryt
-          </a>
+          </Link>
         </div>
       </div>
     </form>

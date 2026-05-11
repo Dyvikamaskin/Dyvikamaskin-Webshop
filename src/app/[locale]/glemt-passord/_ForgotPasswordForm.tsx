@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 const inputStyle: React.CSSProperties = {
@@ -136,9 +137,9 @@ export default function ForgotPasswordForm() {
       </button>
 
       <p style={{ textAlign: "center", marginTop: "1.25rem", fontSize: "0.85rem", color: "#64748b" }}>
-        <a href="/login" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+        <Link href="/login" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
           ← Tilbake til innlogging
-        </a>
+        </Link>
       </p>
     </form>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { loginAction } from "@/app/actions/auth";
 
 // ─── Shared input style ───────────────────────────────────────────────────────
@@ -135,9 +136,9 @@ export default function LoginForm({ next }: { next?: string }) {
       {/* Register link */}
       <p style={{ textAlign: "center", marginTop: "1.25rem", fontSize: "0.85rem", color: "#64748b" }}>
         Har du ikke konto?{" "}
-        <a href="/registrer" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+        <Link href="/registrer" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
           Registrer deg
-        </a>
+        </Link>
       </p>
     </form>
   );

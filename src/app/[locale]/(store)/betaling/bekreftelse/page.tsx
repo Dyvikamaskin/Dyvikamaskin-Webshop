@@ -84,7 +84,7 @@ export default async function BekreftelsePage({ searchParams }: PageProps) {
     >
       {/* Auto-refresh while payment is still processing */}
       {isPending && (
-        // eslint-disable-next-line @next/next/no-head-element
+         
         <meta httpEquiv="refresh" content="5" />
       )}
 

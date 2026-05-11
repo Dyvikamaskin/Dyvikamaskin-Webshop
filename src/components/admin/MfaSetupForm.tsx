@@ -38,7 +38,7 @@ export function MfaSetupForm() {
 
   useEffect(() => {
     void start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   async function start() {

@@ -122,7 +122,7 @@ export async function getCategoryBySlug(slug: string): Promise<{
   let parentId: string | null = category.parentId;
 
   while (parentId) {
-    // eslint-disable-next-line no-await-in-loop
+     
     const parent = await prisma.category.findUnique({
       where: { id: parentId },
       select: {
@@ -213,7 +213,7 @@ export async function validateCategoryDepth(
     depth++;
     if (depth > maxDepth) return { valid: false, depth };
 
-    // eslint-disable-next-line no-await-in-loop
+     
     const parent: { parentId: string | null } | null =
       await prisma.category.findUnique({
         where: { id: currentId },

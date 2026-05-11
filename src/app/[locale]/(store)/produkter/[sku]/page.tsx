@@ -197,9 +197,9 @@ export default async function ProductPage({ params }: PageProps) {
     >
       {/* Breadcrumb */}
       <nav style={{ marginBottom: "1rem", fontSize: "0.875rem", color: "#666" }}>
-        <a href="/produkter" style={{ color: "#1d4ed8", textDecoration: "none" }}>
+        <Link href="/produkter" style={{ color: "#1d4ed8", textDecoration: "none" }}>
           Produkter
-        </a>
+        </Link>
         {product.category && (
           <>
             {" / "}

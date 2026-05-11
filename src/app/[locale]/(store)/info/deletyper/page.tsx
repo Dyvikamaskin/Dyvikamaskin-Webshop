@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -72,9 +73,9 @@ export default function DeletyperPage() {
 
       <p style={{ fontSize: "0.85rem", color: "#64748b" }}>
         Du kan filtrere produkter etter opphav på{" "}
-        <a href="/produkter" style={{ color: "#1e40af", textDecoration: "underline" }}>
+        <Link href="/produkter" style={{ color: "#1e40af", textDecoration: "underline" }}>
           produktoversikten
-        </a>
+        </Link>
         .
       </p>
     </main>

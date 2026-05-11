@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { getCookieConsentValue, Cookies } from "react-cookie-consent";
 
 /**
@@ -95,9 +96,9 @@ export function CookieConsentBanner() {
           Nødvendige kapsler kreves for at handlekurv, innlogging og språk
           skal fungere. Du kan velge om vi får sette analyse- og
           markedsføringskapsler. Mer informasjon på{" "}
-          <a href="/personvern" style={{ color: "#93c5fd", textDecoration: "underline" }}>
+          <Link href="/personvern" style={{ color: "#93c5fd", textDecoration: "underline" }}>
             personvern-siden
-          </a>
+          </Link>
           .
         </p>
 

@@ -37,6 +37,10 @@ export default async function InnkjopPage() {
         <p style={{ margin: "0 0 1rem", fontSize: "0.9375rem" }}>
           Aktuelle lav-lager-poster: <strong>{lowCount}</strong>
         </p>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages --
+            /api/exports/low-stock is an API route returning a CSV file.
+            <Link> would intercept it for client-side navigation; we want
+            a hard browser nav so the browser triggers the file download. */}
         <a
           href="/api/exports/low-stock"
           style={{

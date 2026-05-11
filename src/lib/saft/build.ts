@@ -207,7 +207,7 @@ export async function buildSaftXml(input: SaftExportInput): Promise<string> {
   const salesInvoices = sourceDocs.ele("SalesInvoices");
   salesInvoices.ele("NumberOfEntries").txt(String(sales.length));
 
-  let totalDebit = new Prisma.Decimal(0);
+  const totalDebit = new Prisma.Decimal(0);
   let totalCredit = new Prisma.Decimal(0);
 
   for (const s of sales) {

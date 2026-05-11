@@ -100,7 +100,7 @@ export default function StorefrontScanner() {
     return () => {
       (async () => { try { await h5q?.stop(); h5q?.clear(); } catch { /* ignore */ } })();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [cameraOn]);
 
   // ── Navigate to product ─────────────────────────────────────────────────────

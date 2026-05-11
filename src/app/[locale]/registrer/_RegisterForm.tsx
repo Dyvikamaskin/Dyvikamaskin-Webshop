@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 // ─── Norwegian error messages ─────────────────────────────────────────────────
@@ -218,9 +219,9 @@ export default function RegisterForm() {
       {/* Login link */}
       <p style={{ textAlign: "center", marginTop: "1.25rem", fontSize: "0.85rem", color: "#64748b" }}>
         Har du allerede konto?{" "}
-        <a href="/login" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+        <Link href="/login" style={{ color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
           Logg inn
-        </a>
+        </Link>
       </p>
     </form>
   );

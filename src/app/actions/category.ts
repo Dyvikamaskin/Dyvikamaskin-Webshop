@@ -61,7 +61,7 @@ async function uniqueSlug(name: string): Promise<string> {
   let suffix = 2;
   // Cheap loop — the call site only fires when a path segment is
   // genuinely new, so collisions are rare and bounded.
-  // eslint-disable-next-line no-constant-condition
+   
   while (true) {
     const exists = await prisma.category.findUnique({
       where: { slug: candidate },

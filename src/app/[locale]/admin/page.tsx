@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { UserRole, OrderStatus, FulfillmentStatus } from "@/app/generated/prisma/enums";
@@ -246,7 +247,7 @@ export default async function AdminDashboardPage() {
       <section style={{ marginTop: "2.5rem" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "1rem", marginBottom: "0.75rem" }}>
           <h2 style={sectionTitle}>Siste ordrer</h2>
-          <a href="/admin/ordrer" style={linkStyle}>Se alle →</a>
+          <Link href="/admin/ordrer" style={linkStyle}>Se alle →</Link>
         </div>
         <div style={tableCard}>
           <table style={tableStyle}>
@@ -300,7 +301,7 @@ export default async function AdminDashboardPage() {
       <section style={{ marginTop: "2.5rem" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "1rem", marginBottom: "0.75rem" }}>
           <h2 style={sectionTitle}>Siste aktivitet</h2>
-          <a href="/admin/revisjonslogg" style={linkStyle}>Se hele loggen →</a>
+          <Link href="/admin/revisjonslogg" style={linkStyle}>Se hele loggen →</Link>
         </div>
         <div style={tableCard}>
           <table style={tableStyle}>
