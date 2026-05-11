@@ -35,19 +35,23 @@ Five small follow-ons landed:
 | `292dd21` | Admin overview: new `Bruttofortjeneste (estimat)` row beneath Omsetning showing margin in kr + % per period (I dag / Denne uka / Denne mnd). Footnote when not 100 % of items have `purchasePrice`. Existing Omsetning flipped from `totalPrice` (incl. MVA) to `subtotalExclMva` (ex-MVA) — the old label was technically misleading in Norwegian accounting terms. |
 | `bc05e8f` | Lint cleanup. 11 in-app `<a href>` migrations to `next/link` (CookieConsentBanner, LoginForm, RegisterForm, ForgotPasswordForm, info/deletyper, produkter/[sku] breadcrumb, admin overview "Se alle" links, admin produktforslag back-link, _NyttProduktForm). One `/api/exports/low-stock` `<a>` kept with eslint-disable + explainer (file download, not page nav). Plus `eslint --fix` autofix pass. Lint problem count 273 → 155. |
 | `a408c21` | **Chrome refresh.** Red Dyvikamaskin logo (321×98 PNG, displayed at 118×36 via `next/image` with `loading="eager"` + `fetchPriority="high"`) replaces the text wordmark in TopBar. VELG LAGER button dropped from PrimaryNav. Three logo files committed to `public/brand/`. Locked-in product decision: chrome stays two-row white, no dark utility bar. |
+| `f1eb858` | **Manual backup trigger.** New "Kjør sikkerhetskopi nå" button on `/admin/backup/setup` enqueues a one-off `daily-backup` job to the maintenance queue — same code path as the 02:00 UTC cron. Polls every 2 s for the resulting `BackupRun` row and surfaces SUCCESS / SKIPPED / FAILED with size + duration + storage path. Verified end-to-end (68 KB, 2 s, real artifact in Supabase Storage). |
 
 ## Operational status (verified 11 May 2026)
 
-- **Daily backup cron is firing on schedule** but the latest run
-  (02:00:00 UTC 11 May 2026) returned **SKIPPED**:
-  > "No SUPER_ADMIN with backupPublicKey configured. Visit
-  > /admin/backup/setup to enable automatic backups."
+- **Daily backup pipeline: fully alive.** SUPER_ADMIN
+  `dyvikamaskin@bojoind.com` enrolled an age key pair on 11 May 08:24
+  UTC. A manual verification run at 12:27 UTC produced a 68 KB
+  `SUCCESS` artifact at `2026/05/11/industriparts-…sql.age` in
+  Supabase Storage in ~2 seconds. Next scheduled run tomorrow at
+  02:00 UTC should land green automatically. (The 02:00 UTC run this
+  morning returned SKIPPED because the key wasn't enrolled yet —
+  that's the BackupRun row sitting below the SUCCESS one.)
 
-  **Action required** — a SUPER_ADMIN needs to log in and walk through
-  `/admin/backup/setup` to generate an age key pair and store the
-  public key on their Profile. Until then, automatic backups are
-  no-ops. Manual browser-download backups still work; this only blocks
-  the unattended Supabase Storage path.
+  Manual trigger lives at `/admin/backup/setup` →
+  "Verifiser sikkerhetskopi" → "Kjør sikkerhetskopi nå". Same code
+  path as the cron — useful whenever a key is rotated or the pipeline
+  needs a sanity check.
 
 - **Railway curl cron retirement: hold for now.** The `maintenance`
   BullMQ queue worker boots cleanly on every deploy (we see
@@ -103,13 +107,15 @@ For deep context read these in order:
 
 ## Where the code is
 
-`main` HEAD: `a408c21 feat(chrome): red logo in TopBar + drop VELG LAGER from PrimaryNav`.
+`main` HEAD: `f1eb858 feat(backup): "Kjør sikkerhetskopi nå" trigger on /admin/backup/setup`.
 Production Railway tracks `main` and is live with everything below.
-Last deploy: `017a9e98` SUCCESS at 11 May 13:59 +02:00.
+Last deploy: `31c31068` SUCCESS at 11 May 14:21 +02:00.
 
 Recent commits on `main` (newest first):
 
 ```
+f1eb858 feat(backup): "Kjør sikkerhetskopi nå" trigger on /admin/backup/setup
+36be766 docs: shrink v4.2 plan after early chrome refresh (a408c21)
 a408c21 feat(chrome): red logo in TopBar + drop VELG LAGER from PrimaryNav
 6d3d3c7 docs: pin logo dims, record VIPPS verification, backup + cron status
 bc05e8f chore(lint): a-href → Link migration + autofix sweep
