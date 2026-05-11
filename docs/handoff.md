@@ -34,6 +34,38 @@ Three small follow-ons landed:
 | `ace9276` | `Privat | Bedrift` segmented toggle in the TopBar — only for anonymous guests. Pure cookie flip via existing `setCustomerTypeAction` (no BRREG lookup). Hidden for authenticated users. Reload after flip so server-rendered prices refresh. |
 | `292dd21` | Admin overview: new `Bruttofortjeneste (estimat)` row beneath Omsetning showing margin in kr + % per period (I dag / Denne uka / Denne mnd). Footnote when not 100 % of items have `purchasePrice`. Existing Omsetning flipped from `totalPrice` (incl. MVA) to `subtotalExclMva` (ex-MVA) — the old label was technically misleading in Norwegian accounting terms. |
 
+## Operational status (verified 11 May 2026)
+
+- **Daily backup cron is firing on schedule** but the latest run
+  (02:00:00 UTC 11 May 2026) returned **SKIPPED**:
+  > "No SUPER_ADMIN with backupPublicKey configured. Visit
+  > /admin/backup/setup to enable automatic backups."
+
+  **Action required** — a SUPER_ADMIN needs to log in and walk through
+  `/admin/backup/setup` to generate an age key pair and store the
+  public key on their Profile. Until then, automatic backups are
+  no-ops. Manual browser-download backups still work; this only blocks
+  the unattended Supabase Storage path.
+
+- **Railway curl cron retirement: hold for now.** The `maintenance`
+  BullMQ queue worker boots cleanly on every deploy (we see
+  `[queue] workers started: notifications, enrichment, maintenance` in
+  startup logs), but the Railway CLI scopes `railway logs --since 24h`
+  to the current deployment only — we can't yet confirm 24 hours of
+  `[maintenance] expired reservations` ticks across deployments from a
+  terminal. Check the **Railway dashboard logs** (which span
+  deployments) for that line before deleting the curl service. The
+  `curl-cron` service is harmless to keep running in the meantime.
+
+- **Vipps redirect URLs** are constructed dynamically — there is no
+  `VIPPS_REDIRECT_URI` env var on Railway. The route-group rename in
+  PR 1 of the v4.2 queue cannot break the Vipps flow because of this.
+  (Recorded in `v4.2-redesign-plan.md` §PR 1 Risks.)
+
+- **Logo dimensions for PR 1** of the v4.2 queue: `dyvika-logo-red.png`
+  is 321 × 98 px. At display height 36 px → width 118 px. Recorded in
+  `v4.2-redesign-plan.md` §PR 1 step 1.
+
 ## Outstanding work queue
 
 | Order | Branch | Scope | Reference |
