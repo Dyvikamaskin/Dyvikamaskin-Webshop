@@ -69,6 +69,7 @@ enum DiscountSource {
   NONE
   CUSTOMER_DISCOUNT
   PROMOTION
+  FIXED_PRICE      // Phase 8 follow-up — CustomerPriceList PRODUCT-scope fixedPrice
 }
 
 enum DiscountType {

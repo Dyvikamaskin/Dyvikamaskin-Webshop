@@ -131,6 +131,44 @@ async function handleCaptured(event: VippsWebhookEvent) {
 // never decremented it in the first place — that is the whole point of the
 // new flow.
 
+// ─── REFUNDED handler — Phase 3 follow-up ──────────────────────────────────────
+//
+// Vipps confirms a refund went through. Closes the loop with the Phase 7
+// returns flow: the admin-triggered refund created a ReturnRequest row with
+// vippsRefundReference = "pending:<timestamp>"; this handler finds the most
+// recent pending row for the sale and back-fills the real pspReference.
+//
+// If no pending row exists (e.g. refund initiated via the Vipps portal directly,
+// outside our admin), we log the event but don't fabricate a ReturnRequest.
+
+async function handleRefunded(event: VippsWebhookEvent) {
+  const { reference: checkoutSessionId, amount, pspReference } = event;
+
+  // Find the most recent ReturnRequest for any Sale in this checkout that
+  // is still in the "pending vipps reference back-fill" state.
+  const candidate = await prisma.returnRequest.findFirst({
+    where: {
+      sale: { checkoutSessionId },
+      vippsRefundReference: { startsWith: "pending:" },
+    },
+    orderBy: { refundedAt: "desc" },
+    select: { id: true },
+  });
+
+  if (candidate && pspReference) {
+    await prisma.returnRequest.update({
+      where: { id: candidate.id },
+      data: { vippsRefundReference: pspReference },
+    });
+  }
+
+  await logAuditEvent("VIPPS_REFUNDED", checkoutSessionId, {
+    amountOre: amount.value,
+    pspReference,
+    backfilledReturnRequestId: candidate?.id ?? null,
+  });
+}
+
 async function handleVoided(event: VippsWebhookEvent) {
   const { reference: checkoutSessionId, name } = event;
 
@@ -214,11 +252,7 @@ export async function POST(request: NextRequest) {
         break;
 
       case "REFUNDED":
-        // Refund flow lands in a follow-up; for now, just record it.
-        await logAuditEvent("VIPPS_REFUNDED", event.reference, {
-          amountOre: event.amount.value,
-          pspReference: event.pspReference,
-        });
+        await handleRefunded(event);
         break;
 
       default:

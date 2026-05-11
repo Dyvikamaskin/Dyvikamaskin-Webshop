@@ -296,6 +296,7 @@ describe("calculatePrice — CustomerPriceList (Phase 8)", () => {
     expect(result.priceBaseEx.toString()).toBe("650");
     expect(result.priceEx.toString()).toBe("650");
     expect(result.discountPct.toString()).toBe("0");
+    expect(result.discountSource).toBe(DiscountSource.FIXED_PRICE);
     // mva = 25% of 650 = 162.50
     expect(result.mvaAmount.toString()).toBe("162.5");
   });

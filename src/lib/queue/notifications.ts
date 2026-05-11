@@ -23,7 +23,8 @@ export type NotificationJobName =
   | "shipped"
   | "ready-for-pickup"
   | "low-stock"
-  | "invoice-issued";
+  | "invoice-issued"
+  | "quote-sent";
 
 export type NotificationJobData =
   | { kind: "order-confirmed"; saleId: string }
@@ -37,7 +38,8 @@ export type NotificationJobData =
       kidNumber: string;
       invoiceDueDate: Date;
       dueDays: number;
-    };
+    }
+  | { kind: "quote-sent"; quoteId: string };
 
 // ─── Queue (producer) ─────────────────────────────────────────────────────────
 
@@ -113,6 +115,11 @@ export async function processNotificationJob(
         job.data.invoiceDueDate,
         job.data.dueDays,
       );
+      return;
+    }
+    case "quote-sent": {
+      const { sendQuoteNotification } = await import("@/lib/quote-notification");
+      await sendQuoteNotification(job.data.quoteId);
       return;
     }
     default: {

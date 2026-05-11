@@ -316,7 +316,11 @@ export function calculatePrice(input: PriceInput): PricedProduct {
       : ONE.minus(discountPct.div(HUNDRED)) as Money;
   if (fixedPriceOverride) {
     discountPct = ZERO;
-    discountSource = DiscountSource.CUSTOMER_DISCOUNT;
+    // Phase 8 follow-up — distinguish "fixed price contract" from a
+    // percentage-based customer discount so audit/regnskap can read it
+    // off cleanly.
+    discountSource = DiscountSource.FIXED_PRICE;
+    promotionId = undefined;
   }
   const priceEx = roundMoney(priceBaseEx.mul(factor) as Money);
   const mvaAmount = roundMoney(priceEx.mul(mvaRate) as Money);

@@ -25,6 +25,7 @@ import ShippedEmail,         { type ShippedEmailProps }         from "@/emails/S
 import ReadyForPickupEmail,  { type ReadyForPickupEmailProps }  from "@/emails/ReadyForPickupEmail";
 import InvoiceIssuedEmail,   { type InvoiceIssuedEmailProps }   from "@/emails/InvoiceIssuedEmail";
 import LowStockAlertEmail,   { type LowStockAlertEmailProps }   from "@/emails/LowStockAlertEmail";
+import QuoteSentEmail,       { type QuoteSentEmailProps }       from "@/emails/QuoteSentEmail";
 
 export type EmailPurpose = "TRANSACTIONAL" | "MARKETING";
 
@@ -188,6 +189,29 @@ export async function sendLowStockAlertEmail(
     return { ok: true, id: data?.id };
   } catch (err) {
     console.error("[email] sendLowStockAlertEmail failed", err);
+    return { ok: false, error: String(err) };
+  }
+}
+
+// ─── Quote sent (transactional — RFQ response) ──────────────────────────────
+
+export async function sendQuoteSentEmail(
+  to: string,
+  props: QuoteSentEmailProps,
+): Promise<EmailResult> {
+  try {
+    const html = await render(QuoteSentEmail(props));
+    const resend = getResend();
+    const { data, error } = await resend.emails.send({
+      from: `${COMPANY_NAME} <${FROM_ADDRESS}>`,
+      to,
+      subject: `Tilbud ${props.quoteNumber} fra Dyvikamaskin`,
+      html,
+    });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, id: data?.id };
+  } catch (err) {
+    console.error("[email] sendQuoteSentEmail failed", err);
     return { ok: false, error: String(err) };
   }
 }

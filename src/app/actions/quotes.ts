@@ -6,6 +6,7 @@ import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { enqueueNotification } from "@/lib/queue/notifications";
 import {
   QuoteStatus,
   UserRole,
@@ -149,6 +150,14 @@ export async function sendQuoteAction(quoteId: string): Promise<QuoteActionResul
     data: { status: QuoteStatus.SENT, sentAt: new Date() },
   });
   await logAudit(admin.id, "QUOTE_SENT", "Quote", quoteId, null, null);
+
+  // Phase 7 follow-up — email the customer that the quote is ready.
+  // Goes through the notifications BullMQ queue so a Resend outage
+  // doesn't block the admin action. Idempotent at the email layer
+  // (Resend dedupes by Idempotency-Key not used here, but multiple
+  // sends are operationally harmless — the customer gets a dup).
+  await enqueueNotification({ kind: "quote-sent", quoteId });
+
   revalidatePath("/admin/tilbud");
   return { ok: true };
 }
