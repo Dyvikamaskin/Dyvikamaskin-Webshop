@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { UserRole } from "@/app/generated/prisma/enums";
 import { BackupSetupForm } from "@/components/admin/BackupSetupForm";
+import { TriggerBackupButton } from "@/components/admin/TriggerBackupButton";
 
 export const metadata: Metadata = {
   title: "Sikkerhetskopi — oppsett",
@@ -84,6 +85,8 @@ export default async function BackupSetupPage() {
       ) : null}
 
       <BackupSetupForm hasExistingKey={Boolean(profile?.backupPublicKey)} />
+
+      <TriggerBackupButton hasKey={Boolean(profile?.backupPublicKey)} />
     </main>
   );
 }

@@ -57,6 +57,28 @@ function getQueue(): Queue<MaintenanceJobData> {
 }
 
 /**
+ * Add a one-off maintenance job to the queue. Goes to the same worker
+ * that handles cron ticks, so the behaviour is identical to a scheduled
+ * fire — useful for admin "Run X now" buttons that want to verify a
+ * pipeline (e.g. /admin/backup/setup's "Kjør sikkerhetskopi nå").
+ *
+ * Returns the job id so the caller can poll for the resulting database
+ * row (BackupRun, etc.) by timestamp.
+ */
+export async function enqueueMaintenanceJob(
+  data: MaintenanceJobData,
+): Promise<string> {
+  const q = getQueue();
+  const job = await q.add(data.kind, data, {
+    // One retry — same policy as cron ticks. Don't waste cycles on
+    // configuration errors; surface them to the admin immediately.
+    attempts: 2,
+    backoff: { type: "fixed", delay: 5_000 },
+  });
+  return job.id!;
+}
+
+/**
  * Install / update the cron schedules for every recurring job.
  * Idempotent — calling multiple times is safe.
  */
