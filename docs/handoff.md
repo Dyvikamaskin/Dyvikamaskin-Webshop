@@ -1,19 +1,54 @@
 # Session handoff — IndustriParts v4.1 work
 
-**As of 10 May 2026 (end of session).**
-Phases 0–5 + 4.5 live in production. Five Phase 4 / 4.5 / 5 follow-ups
-also landed this session: `VIPPS_DISABLE_CAPTURE` kill-switch, Sentry
-alert wiring for failed BullMQ jobs, search autocomplete dropdown,
-BullMQ-cron migration (new `maintenance` queue), and automatic
-daily backup at 02:00 UTC to Supabase Storage.
+**As of 11 May 2026 (end of session).**
+Phases 0–9 all live in production, all v4.1 follow-ups closed, plus
+three small follow-ons this session: customer-visible product
+gallery + SEO-only tags + the audience toggle (`Privat | Bedrift`) in
+the TopBar for guests, and the new gross-margin row on the admin
+overview.
 
-This page captures the live state of the v4.1 upgrade work so a new
-developer (or a fresh Claude Code session) can pick it up without
-reading the full chat transcript.
+Next up — **v4.2 storefront redesign**. Three independent PRs queued
+in `docs/v4.2-redesign-plan.md`. Nothing started yet; all design
+decisions locked with the product owner.
 
-## Last session's deltas (skim this first)
+## Quickstart for a new owner
 
-Five focused follow-ups landed on top of the Phases 0–5+4.5 base:
+1. **Read this file top to bottom.** Then:
+2. [`v4.2-redesign-plan.md`](v4.2-redesign-plan.md) — the queued
+   redesign work, decisions, file-by-file plan, time estimates.
+3. [`v4.1-implementation-plan.md`](v4.1-implementation-plan.md) —
+   the upstream master plan (phases 0-9).
+4. [`route-stub-registry.md`](route-stub-registry.md) — known route
+   stubs (`/kampanjer`, `/info/finn-lager`).
+
+Codebase is on `main` at `292dd21` — production Railway tracks it and
+is live. Deploy `ebe67970` (11 May 10:21 +02:00) = SUCCESS.
+
+## This session's deltas (skim before starting work)
+
+Three small follow-ons landed:
+
+| Commit | What |
+|---|---|
+| `1255f75` | Customer-facing product gallery (hero + thumbnails) + tags exposed as `<meta keywords>` + JSON-LD Product schema on PDP. `mainImage` moved out of admin-only fieldset into a public "Bilder" group. |
+| `ace9276` | `Privat | Bedrift` segmented toggle in the TopBar — only for anonymous guests. Pure cookie flip via existing `setCustomerTypeAction` (no BRREG lookup). Hidden for authenticated users. Reload after flip so server-rendered prices refresh. |
+| `292dd21` | Admin overview: new `Bruttofortjeneste (estimat)` row beneath Omsetning showing margin in kr + % per period (I dag / Denne uka / Denne mnd). Footnote when not 100 % of items have `purchasePrice`. Existing Omsetning flipped from `totalPrice` (incl. MVA) to `subtotalExclMva` (ex-MVA) — the old label was technically misleading in Norwegian accounting terms. |
+
+## Outstanding work queue
+
+| Order | Branch | Scope | Reference |
+|---|---|---|---|
+| 1 | `phase-globalize-topbar` | Logo asset, route group `(store)` → `(customer)`, EntryModal mount shift, TopBar logo swap, cached drawer fetchers | `v4.2-redesign-plan.md` §PR 1 |
+| 2 | `phase-desktop-drawer` | Cascading multi-pane drawer on `≥md`, mobile keeps stack/push | `v4.2-redesign-plan.md` §PR 2 |
+| 3 | `phase-design-homepage` | Tokens, marketing components, homepage cutover, Kampanjer + Outlet placeholders | `v4.2-redesign-plan.md` §PR 3 |
+
+Total estimated time: ~7 h 30 min. Each PR is independent — you can
+stop after any of them and ship.
+
+## Earlier session's deltas (for context)
+
+Five focused follow-ups landed on top of the Phases 0–5+4.5 base
+during the previous session (10 May 2026):
 
 | Commit | What |
 |---|---|
@@ -33,30 +68,36 @@ For deep context read these in order:
 
 ## Where the code is
 
-`main` HEAD: `2a04cf1 feat(daily-backup): automatic age-encrypted backup at 02:00 UTC to Supabase Storage`.
+`main` HEAD: `292dd21 feat(admin-overview): gross margin tiles + flip Omsetning to ex-MVA`.
 Production Railway tracks `main` and is live with everything below.
+Last deploy: `ebe67970` SUCCESS at 11 May 10:21 +02:00.
 
-Recent commits on `main`:
+Recent commits on `main` (newest first):
 
 ```
+292dd21 feat(admin-overview): gross margin tiles + flip Omsetning to ex-MVA
+ace9276 feat(customer-type): Privat | Bedrift toggle in TopBar for guests
+1255f75 feat(product-visibility): customer gallery + SEO-only tags
+db5beb6 feat(follow-ups): finish open phase 7/8/9 items
+e9b236f feat(phase-9): GDPR -- cookie banner + privacy + data rights + consent gate
+a0c06ae feat(phase-8): B2B richness -- per-customer pricing + backorder + supplier + marketing consent
+5e73bea feat(phase-7): returns + quotes + SAF-T 1.10 + a11y scaffolding
+a187a1a feat(admin-metadata): purchasePrice + tags + hiddenDescription + image upload
+19010d6 feat(phase-6): hardening -- RLS + rate limits + CSP + opt-in MFA
 2a04cf1 feat(daily-backup): automatic age-encrypted backup at 02:00 UTC to Supabase Storage
 0ac27b0 feat(maintenance-queue): BullMQ-cron migration -- expire-reservations every minute
 c9e6b9c chore(follow-ups): VIPPS_DISABLE_CAPTURE + Sentry job alerts + search autocomplete
 d468bf1 feat(phase-4.5): local-disk backup MVP -- age-encrypted SQL dump
 1412867 fix(proxy): exclude /api from next-intl matcher
 b84a79e feat(phase-5): pg_trgm + FTS search -- three-stage relevance cascade
-406f86c fix(phase-2/4): unbreak prod build -- decimal.js direct, not via Prisma
-0877fe2 feat(phase-4): bullmq job queue v1 -- co-host model
-fe6447b feat(phase-3): Vipps capture-on-dispatch + StockReservation
-5af16ff feat(phase-2): money correctness -- Decimal end-to-end
 ```
 
-Phase branches remain on origin as historical references (`phase-0-triage`
-through `phase-4.5-backup-mvp`). The most recent three commits above
-landed directly on `main` since they were small, independent follow-ups
-rather than a full phase.
+Phase branches remain on origin as historical references. Phases 6-9
+plus the recent follow-ons landed directly on `main` since each was a
+self-contained PR rather than a multi-week phase.
 
 GitHub Flow: feature branches off `main`, fast-forward merge back.
+Standard gates per PR: `npm run typecheck && npm test && npm run build && npm run audit:links`.
 
 ## Phase status
 
@@ -72,10 +113,12 @@ GitHub Flow: feature branches off `main`, fast-forward merge back.
 | 4 Job queue (BullMQ) v1 | ✅ Live | Co-host model. `notifications` + `enrichment` + `maintenance` queues. Workers boot via `src/instrumentation.ts`. Sentry pipe wires terminal failures to alerts (`reportJobFailure`). **Requires `REDIS_URL`** — set on Railway + local `.env`. |
 | 4.5 Backup (local + automatic) | ✅ Live | Two paths in parallel — see "Backup architecture" below. Manual MVP streams to browser; automatic daily job uploads age-encrypted artifact to Supabase Storage. `BackupRun` audit table tracks every run. |
 | 5 Search (pg_trgm + FTS) | ✅ Live | `Product.searchKey` + `Product.searchVector` columns + trigger; three-stage cascade (exact → trigram → FTS) in `src/services/catalog/search.ts`. Storefront autocomplete dropdown wired to `/api/search`. |
-| 6 Hardening (CSP / MFA / RLS) | ⏳ Not started | One open decision (MFA grace period) — default 7 days |
-| 7 Returns + Quotes + A11y + SAF-T | ⏳ Not started | |
-| 8 B2B richness | ⏳ Not started | |
-| 9 GDPR | ⏳ Not started | |
+| 6 Hardening (CSP / MFA / RLS) | ✅ Live | Two-phase opt-in MFA (env-gated). RLS on customer-data tables. Login + checkout rate limits via Upstash. CSP Report-Only first, then enforce. |
+| 7 Returns + Quotes + A11y + SAF-T | ✅ Live | Forbrukerkjøpsloven returns flow with Vipps refund; B2B RFQ → convertToOrder; SAF-T 1.10 XML export; a11y scaffolding (axe-core in CI). |
+| 8 B2B richness | ✅ Live | Per-customer `CustomerPriceList`; backorder workflow on SaleItem; Supplier model + admin UI; marketing consent gate on email service. |
+| 9 GDPR | ✅ Live | Cookie banner (3 categories, granular); /personvern + /vilkar pages; Art. 20 export (`gdpr.ts`); Art. 17 anonymise; marketing consent. |
+| **Follow-ons** | ✅ Live | admin-metadata (purchasePrice + tags + hiddenDescription + image upload); product-visibility (gallery + SEO tags + JSON-LD); customer-type toggle in TopBar; gross-margin tiles on /admin. |
+| v4.2 Storefront redesign | ⏳ Queued | Three PRs in `v4.2-redesign-plan.md`. ~7h30. |
 
 ## Verified locally as of last commit
 
