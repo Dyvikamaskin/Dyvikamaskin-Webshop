@@ -72,11 +72,16 @@ export default function NyttProduktForm({ categories }: Props) {
   const [replaceInput,        setReplaceInput]        = useState("");
   const [condition,           setCondition]           = useState<ProductCondition>(ProductCondition.NEW);
   const [provenance,          setProvenance]          = useState<PartProvenance>(PartProvenance.AFTERMARKET);
-  // ── Admin-only metadata (NEVER visible on storefront) ─────────────────
+  // ── Admin-only metadata (tags surface as <meta keywords> only) ────────
   const [tags,                setTags]                = useState<string[]>([]);
   const [tagInput,            setTagInput]            = useState("");
   const [mainImageUrl,        setMainImageUrl]        = useState("");
+  // Gallery images shown on the PDP after mainImage. Each entry is a
+  // URL (typed or returned by uploadProductImageAction).
+  const [galleryImages,       setGalleryImages]       = useState<string[]>([]);
+  const [galleryUrlInput,     setGalleryUrlInput]     = useState("");
   const [uploadingImage,      setUploadingImage]      = useState(false);
+  const [uploadingGallery,    setUploadingGallery]    = useState(false);
   const [imageError,          setImageError]          = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -111,6 +116,7 @@ export default function NyttProduktForm({ categories }: Props) {
       tags,
       hiddenDescription: (fd.get("hiddenDescription") as string) || undefined,
       mainImage: mainImageUrl.trim() || undefined,
+      galleryImages: galleryImages.length > 0 ? galleryImages : undefined,
     });
 
     setPending(false);
@@ -162,6 +168,37 @@ export default function NyttProduktForm({ categories }: Props) {
       return;
     }
     setMainImageUrl(result.url);
+  }
+
+  function addGalleryUrl() {
+    const v = galleryUrlInput.trim();
+    if (!v) return;
+    if (!galleryImages.includes(v)) {
+      setGalleryImages((prev) => [...prev, v]);
+    }
+    setGalleryUrlInput("");
+  }
+
+  function removeGalleryImage(url: string) {
+    setGalleryImages((prev) => prev.filter((u) => u !== url));
+  }
+
+  async function handleGalleryUpload(file: File) {
+    setUploadingGallery(true);
+    setImageError(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    const skuInput = document.getElementById("sku") as HTMLInputElement | null;
+    if (skuInput?.value) fd.append("sku", skuInput.value);
+    const result = await uploadProductImageAction(fd);
+    setUploadingGallery(false);
+    if (!result.ok) {
+      setImageError(result.error);
+      return;
+    }
+    if (!galleryImages.includes(result.url)) {
+      setGalleryImages((prev) => [...prev, result.url]);
+    }
   }
 
   return (
@@ -458,13 +495,12 @@ export default function NyttProduktForm({ categories }: Props) {
           </div>
         </div>
 
-        {/* ─── Admin-only metadata (skjult fra butikken) ────────────────── */}
+        {/* ─── Bilder (synlig på produktsiden) ──────────────────────────── */}
         <fieldset
           style={{
             margin: "0.5rem 0",
             padding: "1rem 1.25rem",
-            background: "#f8fafc",
-            border: "1px dashed #cbd5e1",
+            border: "1px solid #e2e8f0",
             borderRadius: "8px",
           }}
         >
@@ -478,7 +514,7 @@ export default function NyttProduktForm({ categories }: Props) {
               letterSpacing: "0.05em",
             }}
           >
-            Intern data — skjult fra butikken
+            Bilder — synlig på produktsiden
           </legend>
 
           {/* Hovedbilde — URL eller opplasting */}
@@ -534,19 +570,155 @@ export default function NyttProduktForm({ categories }: Props) {
                 />
               ) : null}
             </div>
-            {imageError ? (
-              <p style={{ marginTop: "0.4rem", color: "#dc2626", fontSize: "0.8rem" }}>
-                {imageError}
-              </p>
-            ) : null}
             <p style={hintStyle}>
               Lim inn URL fra leverandørens bildebank, eller last opp en fil
               (JPEG / PNG / WebP / GIF, maks 10 MB).
             </p>
           </div>
 
+          {/* Galleribilder */}
+          <div style={{ marginTop: "1.25rem" }}>
+            <label style={labelStyle}>Galleribilder</label>
+            {galleryImages.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                {galleryImages.map((url) => (
+                  <div
+                    key={url}
+                    style={{
+                      position: "relative",
+                      width: 64,
+                      height: 64,
+                      borderRadius: 4,
+                      border: "1px solid #e2e8f0",
+                      overflow: "hidden",
+                      background: "#f8fafc",
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt=""
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeGalleryImage(url)}
+                      aria-label="Fjern bilde"
+                      style={{
+                        position: "absolute",
+                        top: 2,
+                        right: 2,
+                        width: 20,
+                        height: 20,
+                        background: "rgba(15,23,42,0.85)",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "50%",
+                        cursor: "pointer",
+                        fontSize: "0.75rem",
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.4rem" }}>
+              <input
+                type="text"
+                value={galleryUrlInput}
+                onChange={(e) => setGalleryUrlInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); addGalleryUrl(); }
+                }}
+                placeholder="URL til ekstra produktbilde"
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={addGalleryUrl}
+                style={{
+                  padding: "0.55rem 0.9rem",
+                  background: "#f1f5f9",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "6px",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  color: "#0f172a",
+                }}
+              >
+                + Legg til URL
+              </button>
+            </div>
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "0.4rem 0.8rem",
+                background: uploadingGallery ? "#e2e8f0" : "#fff",
+                border: "1px solid #cbd5e1",
+                borderRadius: "6px",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                cursor: uploadingGallery ? "default" : "pointer",
+                color: "#0f172a",
+              }}
+            >
+              {uploadingGallery ? "Laster opp …" : "Eller last opp fil"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                disabled={uploadingGallery}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleGalleryUpload(f);
+                  // Reset so the same file can be re-selected later.
+                  e.target.value = "";
+                }}
+                style={{ display: "none" }}
+              />
+            </label>
+            <p style={hintStyle}>
+              Tilleggsbilder vises som miniatyrer under hovedbildet på
+              produktsiden. Klikk på en miniatyr for å bytte hovedbilde.
+            </p>
+            {imageError ? (
+              <p style={{ marginTop: "0.4rem", color: "#dc2626", fontSize: "0.8rem" }}>
+                {imageError}
+              </p>
+            ) : null}
+          </div>
+        </fieldset>
+
+        {/* ─── Intern data — skjult fra butikken ────────────────────────── */}
+        <fieldset
+          style={{
+            margin: "0.5rem 0",
+            padding: "1rem 1.25rem",
+            background: "#f8fafc",
+            border: "1px dashed #cbd5e1",
+            borderRadius: "8px",
+          }}
+        >
+          <legend
+            style={{
+              padding: "0 0.5rem",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+              color: "#475569",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}
+          >
+            Intern data — skjult fra butikken
+          </legend>
+
           {/* Innkjøpspris */}
-          <div style={{ marginTop: "1rem" }}>
+          <div style={{ marginTop: "0.5rem" }}>
             <label htmlFor="purchasePrice" style={labelStyle}>Innkjøpspris ekskl. MVA (kr)</label>
             <input
               id="purchasePrice"
@@ -633,7 +805,9 @@ export default function NyttProduktForm({ categories }: Props) {
               </button>
             </div>
             <p style={hintStyle}>
-              Fri-form kategorisering for intern søk. Vises aldri i butikken.
+              Intern kategorisering — vises ikke som tekst i butikken, men
+              eksponeres som <code>&lt;meta name=&quot;keywords&quot;&gt;</code> og JSON-LD-stikkord
+              slik at søkemotorer kan finne produktet via interne synonymer.
             </p>
           </div>
 

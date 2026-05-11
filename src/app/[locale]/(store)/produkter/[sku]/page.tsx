@@ -5,6 +5,7 @@ import { getProductBySku } from "@/lib/products";
 import { getConsumerPrice, getBusinessPrice } from "@/lib/pricing";
 import { formatPrice, formatNumber } from "@/lib/formatters";
 import { AddToCartButton } from "@/components/cart/AddToCartButton";
+import { ProductGallery } from "@/components/product/ProductGallery";
 import {
   ProductCondition,
   ConditionRating,
@@ -141,9 +142,17 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return { title: "Produkt ikke funnet" };
   }
 
+  // Internal tags are admin metadata that we deliberately surface to
+  // search engines (via <meta name="keywords">) without rendering
+  // visibly to humans. Next renders the `keywords` field as a meta tag
+  // in <head>; crawlers index it, humans never see it.
+  const keywords =
+    product.tags && product.tags.length > 0 ? product.tags : undefined;
+
   return {
     title: `${product.name} — Dyvikamaskin`,
     description: product.shortDescription ?? undefined,
+    keywords,
   };
 }
 
@@ -206,6 +215,50 @@ export default async function ProductPage({ params }: PageProps) {
         <span>{product.name}</span>
       </nav>
 
+      {/* JSON-LD Product schema. Indexed by Google + Bing for richer
+          search results (price, availability, rating). Internal tags
+          piggyback as `keywords` so crawlers can discover the SKU via
+          merchant-only synonyms / campaign labels without surfacing
+          those terms to human visitors. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Product",
+            name: product.name,
+            sku: product.sku,
+            ...(product.brand
+              ? { brand: { "@type": "Brand", name: product.brand } }
+              : {}),
+            ...(product.partNumber ? { mpn: product.partNumber } : {}),
+            ...(product.shortDescription
+              ? { description: product.shortDescription }
+              : {}),
+            ...(product.mainImage
+              ? {
+                  image: [
+                    product.mainImage,
+                    ...(product.galleryImages ?? []),
+                  ],
+                }
+              : {}),
+            ...(product.tags && product.tags.length > 0
+              ? { keywords: product.tags.join(", ") }
+              : {}),
+            offers: {
+              "@type": "Offer",
+              priceCurrency: "NOK",
+              price: priced.priceInc.toString(),
+              availability:
+                product.totalStock > 0
+                  ? "https://schema.org/InStock"
+                  : "https://schema.org/OutOfStock",
+            },
+          }),
+        }}
+      />
+
       <div
         style={{
           display: "grid",
@@ -214,30 +267,12 @@ export default async function ProductPage({ params }: PageProps) {
           alignItems: "start",
         }}
       >
-        {/* Image */}
-        <div
-          style={{
-            background: "#f9fafb",
-            border: "1px solid #e5e7eb",
-            borderRadius: "0.75rem",
-            aspectRatio: "1",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            overflow: "hidden",
-          }}
-        >
-          {product.mainImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={product.mainImage}
-              alt={product.name}
-              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
-            />
-          ) : (
-            <span style={{ color: "#aaa", fontSize: "3rem" }}>📦</span>
-          )}
-        </div>
+        {/* Images — main + gallery (Phase 7/8/9 follow-ups) */}
+        <ProductGallery
+          mainImage={product.mainImage}
+          galleryImages={product.galleryImages ?? []}
+          alt={product.name}
+        />
 
         {/* Product info */}
         <div>

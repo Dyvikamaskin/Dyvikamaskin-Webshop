@@ -26,6 +26,11 @@ const PRODUCT_SELECT = {
   minimumOrderQuantity: true,
   leadTimeDays: true,
   mainImage: true,
+  galleryImages: true,
+  // tags are admin-internal but exposed here so the PDP can render
+  // them as <meta name="keywords"> for SEO. They are NEVER rendered as
+  // visible text on the page.
+  tags: true,
   isActive: true,
   isDiscontinued: true,
   categoryId: true,

@@ -57,6 +57,8 @@ export interface CreateProductInput {
   /** Image URL — either a typed external link or a Supabase Storage URL
    *  returned by uploadProductImageAction. */
   mainImage?:           string;
+  /** Additional product image URLs rendered as a gallery on the PDP. */
+  galleryImages?:       string[];
 }
 
 export interface CreateProductResult {
@@ -118,6 +120,10 @@ export async function createProductAction(
       ? [...new Set(data.tags.map((t) => t.trim()).filter(Boolean))]
       : [];
 
+    const cleanedGalleryImages = data.galleryImages
+      ? [...new Set(data.galleryImages.map((u) => u.trim()).filter(Boolean))]
+      : [];
+
     await prisma.product.create({
       data: {
         sku:                  data.sku.trim(),
@@ -143,6 +149,7 @@ export async function createProductAction(
         tags:              cleanedTags,
         hiddenDescription: data.hiddenDescription?.trim() || null,
         mainImage:         data.mainImage?.trim()         || null,
+        galleryImages:     cleanedGalleryImages,
       },
     });
 
