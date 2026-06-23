@@ -205,7 +205,7 @@ any of them and ship.
 | Order | Branch | Scope | Reference |
 |---|---|---|---|
 | 4 | `phase-oem-catalog @ 80a33e4` | Apply migration to supabase-dev (or straight to prod — additive-only, 0 products at risk); run the three seeds; verify counts. **DB was paused at session end — wake it via dashboard first.** | "23 June session" above + `Handover-WN-data.md` |
-| 5 | (no branch yet) | Storefront features that consume the catalog: search by OEM number → cross-link to Dyvika `Product` via `partNumber` + `replacesPartNumbers[]`; interactive parts viewer with PNG diagram + clickable callouts (`.hd3` hotspots stored on `OemComponent.hotspotsJson`); HD-asset upload to Supabase Storage bucket. | New plan to be written after #4 lands |
+| 5 | (multiple branches) | Storefront features that consume the catalog. Full plan in [`v4.3-oem-catalog-plan.md`](v4.3-oem-catalog-plan.md) — four PRs: seed prod, render+upload diagrams, OEM-number search (chip `task_1b6fddc8`), interactive parts viewer (chip `task_ef6deb8e`). | `v4.3-oem-catalog-plan.md` |
 
 ## Earlier session's deltas (for context)
 
@@ -290,7 +290,7 @@ Standard gates per PR: `npm run typecheck && npm test && npm run build && npm ru
 | **Follow-ons** | ✅ Live | admin-metadata (purchasePrice + tags + hiddenDescription + image upload); product-visibility (gallery + SEO tags + JSON-LD); customer-type toggle in TopBar; gross-margin tiles on /admin. |
 | v4.2 Storefront redesign | ⏳ Queued | Three PRs in `v4.2-redesign-plan.md`. ~7h. |
 | v4.3 OEM catalog (data plumbing) | 🌓 Branched, awaiting DB | `phase-oem-catalog @ 80a33e4`. Schema + migration + three seeds committed. ~30 min to apply once a Supabase project is awake. See 23 June session above. |
-| v4.3 OEM catalog (storefront features) | ⏳ Not started | Plan to be written after the data lands. Two features: search-by-OEM-number → Dyvika `Product`; interactive parts viewer with PNG + click hotspots. |
+| v4.3 OEM catalog (storefront features) | ⏳ Queued, plan written | Full plan in `v4.3-oem-catalog-plan.md` — 4 PRs (~10h30 total). Two of them filed as task chips: `task_1b6fddc8` (OEM-number search), `task_ef6deb8e` (interactive parts viewer). |
 
 ## Verified locally as of last commit
 
