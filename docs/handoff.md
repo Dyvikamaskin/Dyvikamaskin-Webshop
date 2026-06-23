@@ -1,15 +1,19 @@
 # Session handoff — IndustriParts v4.1 work
 
-**As of 11 May 2026 (end of session).**
-Phases 0–9 all live in production, all v4.1 follow-ups closed, plus
-three small follow-ons this session: customer-visible product
-gallery + SEO-only tags + the audience toggle (`Privat | Bedrift`) in
-the TopBar for guests, and the new gross-margin row on the admin
-overview.
+**As of 23 June 2026 (end of session).**
+Phases 0–9 live in production. v4.2 storefront redesign still queued
+unchanged. This session went sideways into v4.3 data plumbing: a full
+OEM parts-catalog ingest pipeline on a **separate branch
+`phase-oem-catalog` — production is untouched**. See "23 June session"
+section below.
 
-Next up — **v4.2 storefront redesign**. Three independent PRs queued
-in `docs/v4.2-redesign-plan.md`. Nothing started yet; all design
-decisions locked with the product owner.
+Next up — pick one:
+- **v4.2 storefront redesign** — three PRs in
+  `docs/v4.2-redesign-plan.md`, decisions locked, unchanged from
+  11 May. ~7 h.
+- **v4.3 OEM catalog seed run** — schema + migration + three seeds
+  all committed at `80a33e4`. ~30 min once a Supabase project is
+  awake (both projects were paused / timing out at end of session).
 
 ## Quickstart for a new owner
 
@@ -21,8 +25,118 @@ decisions locked with the product owner.
 4. [`route-stub-registry.md`](route-stub-registry.md) — known route
    stubs (`/kampanjer`, `/info/finn-lager`).
 
-Codebase is on `main` at `292dd21` — production Railway tracks it and
-is live. Deploy `ebe67970` (11 May 10:21 +02:00) = SUCCESS.
+Codebase is on `main` at `dc9c4cf` — production Railway tracks it and
+is live. Branch `phase-oem-catalog` (this session, 23 June) is committed
+at `80a33e4` but **not merged**; nothing has been pushed to production
+since 11 May.
+
+## 23 June session — v4.3 OEM-catalog data plumbing
+
+Single new branch — `phase-oem-catalog @ 80a33e4`. Pure additive work:
+adds five new tables for the manufacturer parts catalog (separate from
+the sellable `Product` table); touches no existing tables; production
+DB untouched.
+
+### What landed (on the branch, not merged)
+
+| File | Purpose |
+|---|---|
+| `prisma/schema.prisma` (+158 lines) | New enum `OemCatalogSource` + five models: `OemMachine`, `OemMachineRevision`, `OemComponent`, `OemPart`, `PartPriceSnapshot`. Plus `MachineMake.oemMachines[]` back-relation. |
+| `prisma/migrations/20260623100000_phase_oem_catalog/migration.sql` | Five `CREATE TABLE`, one `CREATE TYPE`, 14 indexes, 4 FKs. Not yet applied. |
+| `prisma/seed-oem-eparts.ts` | Reads `WN manuals an files/eparts/*.json` (572 files, 376 with data) + inlines `.hd3` click-coord JSON from `eparts_assets/`. Writes `OemMachine`/`Revision`/`Component`/`Part` with source=`EPARTS_API`. Idempotent on `(code, source)`. |
+| `prisma/seed-oem-pdfs.ts` | Reads `prisma/draft/wn_parts_export.json` (regenerated from `wn_parts.sqlite`). Writes the same tables with source=`PDF` — separate rows because PDF and eParts SKU sets are only ~34% overlapping. |
+| `prisma/seed-part-prices.ts` | Reads the seven retailer CSVs → `PartPriceSnapshot`. Admin-only competitive pricing snapshot table; **not exposed to the storefront**. |
+| `prisma/draft/export_wn_sqlite.py` | One-line Python that converts `wn_parts.sqlite` → `wn_parts_export.json` for the PDF seed. |
+
+Schema validate ✓, generate ✓, `npm run typecheck` ✓ on the branch.
+
+### What's in `WN manuals an files/` (this session's working data)
+
+Outside the repo (gitignored / untracked). Headlines:
+
+- **`eparts/*.json`** — 572 machine JSONs from `shop.wackerneuson.com`
+  eParts API. 376 with revisions / 196 empty (machines that have no
+  parts book on the shop). 2,226 revisions, 48,315 components,
+  954,146 part-occurrences, **28,316 unique part numbers**, 4,747
+  unique HD diagram references.
+- **`eparts_assets/`** — 575 MB. 4,747 HD PNGs + 4,747 `.hd3`
+  click-coord JSONs, downloaded by `download_eparts_assets.py`.
+  Targeted for Supabase Storage upload during the v4.3 feature build.
+- **`pdfs_shop/`** — 1.8 GB. 372 parts-book PDFs from the same shop,
+  fed by `download_wn_parts_pdfs.py` from `wn_catalogue.json`.
+- **`wn_parts.sqlite`** — 365 manuals · 6,676 assembly groups ·
+  **85,021 parts** · 2,590 recommended-spares (grew from 17/660/8,041
+  during this session — 21× more models, 10× more parts).
+- **7 retailer scrape CSVs** — total **200,387 rows / 161,243 unique
+  SKUs**: hydrotech 25k, danseusa 17k, tmsequip 10k (ConvertCart cap),
+  russopower 1.2k, dhs-brand 600, contractorsdir 170, **dhs-klevu
+  145,901**. The Klevu API alone hit 144k uniques.
+- **`Handover-WN-data.md`** — the working-data handoff. The "Next steps"
+  section there has been migrated into "Open follow-ups → v4.3 OEM
+  catalog" below — that's the canonical list now.
+
+### Key findings worth keeping
+
+- **PDF catalogs and eParts API are 66% disjoint.** Of 25,173 PDF
+  SKUs + 28,316 eParts SKUs, only 8,595 overlap. The eParts API has
+  19,721 SKUs the PDFs miss (newer components, deeper drilldowns); the
+  PDFs have 16,578 SKUs the eParts API no longer publishes (older
+  revisions, obsolete). **Keep both sources.** Union ≈ 44,894 unique
+  part numbers from machine data, plus the 161k retailer SKUs gives
+  ~173k total unique parts in the system.
+- **eParts has multiple revisions per machine** (BPU 2540A has 13).
+  Components can change between adjacent revs even when the
+  device-level `revisionLevel` is unchanged — fetched 247 distinct
+  component URLs for one 9-revision machine. The schema reflects this
+  with the `OemMachineRevision` child table (one row per
+  machine × revision).
+- **eParts component endpoints expose HD diagrams + click hotspots.**
+  Each component returns a PNG filename + `.hd3` JSON with
+  `(callout_id, x1, y1, x2, y2)` rectangles. This enables the v4.3
+  interactive parts viewer with bidirectional callout ↔ row
+  highlighting. The `.hd3` files are tiny (~1 KB) and inlined directly
+  on `OemComponent.hotspotsJson` during seed.
+- **shop.wackerneuson.com is fully scrapable anonymously.** Two
+  endpoints — `/ws/v2/amd/navigation/products/{code}` and
+  `.../components/machine/{code}/revision/{rev}/component/{spc}` — no
+  auth, CORS open, parallel-friendly.
+- **Public storefront search APIs are 50-1000× bigger than the brand
+  pages.** TMS Equipment hides 66k Wacker products behind ConvertCart
+  (10k-cap reachable today). DHS Equipment hides 146k behind Klevu
+  (fully reachable). The bare brand pages on those sites had only 72
+  and 600 respectively.
+- **Three Wacker SKU formats** cover 98% of all numbers we've seen:
+  10-digit starting with 5 (SAP modern, ~56%), 7-digit starting with
+  0 (legacy, ~32%), 10-digit starting with 1 (SAP materials, ~11%).
+
+### Supabase state — both projects paused
+
+At end of session, both Supabase projects (`nxqqmplptalbxmfmbtfs` prod
+and `iuimkzettrrqvvvgfvqp` dev) returned connection timeouts. Free-tier
+projects auto-pause after inactivity; opening either dashboard wakes
+the DB in ~2 minutes. That's the blocker for actually running the
+migration + seeds.
+
+### To finish the OEM-catalog ingest
+
+Two paths (Path A is safer; Path B is fine because prod has 0
+products / 0 sales — the migration is additive-only):
+
+```bash
+# Path A — apply on supabase-dev first
+# 1. Open dashboard for project iuimkzettrrqvvvgfvqp to wake the DB
+# 2. From repo root with DATABASE_URL pointing at supabase-dev:
+npx prisma migrate deploy
+# 3. Regen the PDF export, then run all three seeds (order independent):
+python prisma/draft/export_wn_sqlite.py \
+  --db "WN manuals an files/wn_parts.sqlite" \
+  --out prisma/draft/wn_parts_export.json
+npx tsx prisma/seed-oem-eparts.ts          # ~5-10 min, ~954k parts
+npx tsx prisma/seed-oem-pdfs.ts            # ~1-2 min, ~85k parts
+npx tsx prisma/seed-part-prices.ts         # ~2-3 min, ~200k snapshots
+# 4. Verify counts, push the branch, PR, merge → Railway applies to prod
+# 5. Re-run seeds locally with DATABASE_URL = prod
+```
 
 ## This session's deltas (skim before starting work)
 
@@ -75,15 +189,23 @@ Seven small follow-ons landed:
 
 ## Outstanding work queue
 
+### v4.2 — storefront redesign (decisions locked, unchanged from 11 May)
+
 | Order | Branch | Scope | Reference |
 |---|---|---|---|
 | 1 | `phase-globalize-topbar` | Route group `(store)` → `(customer)`, 6 folder moves into it, EntryModal mount shift, cached drawer fetchers. **No chrome work — already shipped (`a408c21`).** | `v4.2-redesign-plan.md` §PR 1 |
 | 2 | `phase-desktop-drawer` | Cascading multi-pane drawer on `≥md`, mobile keeps stack/push | `v4.2-redesign-plan.md` §PR 2 |
 | 3 | `phase-design-homepage` | Tokens, marketing components for homepage **body only** (chrome unchanged), Kampanjer + Outlet placeholders | `v4.2-redesign-plan.md` §PR 3 |
 
-Total estimated time: ~6 h 45 min (down from ~7 h 30 min after the
-chrome refresh shipped early as `a408c21`). Each PR is independent —
-you can stop after any of them and ship.
+Total estimated time: ~6 h 45 min. Each PR is independent — stop after
+any of them and ship.
+
+### v4.3 prep — OEM catalog (committed, awaiting DB)
+
+| Order | Branch | Scope | Reference |
+|---|---|---|---|
+| 4 | `phase-oem-catalog @ 80a33e4` | Apply migration to supabase-dev (or straight to prod — additive-only, 0 products at risk); run the three seeds; verify counts. **DB was paused at session end — wake it via dashboard first.** | "23 June session" above + `Handover-WN-data.md` |
+| 5 | (no branch yet) | Storefront features that consume the catalog: search by OEM number → cross-link to Dyvika `Product` via `partNumber` + `replacesPartNumbers[]`; interactive parts viewer with PNG diagram + clickable callouts (`.hd3` hotspots stored on `OemComponent.hotspotsJson`); HD-asset upload to Supabase Storage bucket. | New plan to be written after #4 lands |
 
 ## Earlier session's deltas (for context)
 
@@ -166,7 +288,9 @@ Standard gates per PR: `npm run typecheck && npm test && npm run build && npm ru
 | 8 B2B richness | ✅ Live | Per-customer `CustomerPriceList`; backorder workflow on SaleItem; Supplier model + admin UI; marketing consent gate on email service. |
 | 9 GDPR | ✅ Live | Cookie banner (3 categories, granular); /personvern + /vilkar pages; Art. 20 export (`gdpr.ts`); Art. 17 anonymise; marketing consent. |
 | **Follow-ons** | ✅ Live | admin-metadata (purchasePrice + tags + hiddenDescription + image upload); product-visibility (gallery + SEO tags + JSON-LD); customer-type toggle in TopBar; gross-margin tiles on /admin. |
-| v4.2 Storefront redesign | ⏳ Queued | Three PRs in `v4.2-redesign-plan.md`. ~7h30. |
+| v4.2 Storefront redesign | ⏳ Queued | Three PRs in `v4.2-redesign-plan.md`. ~7h. |
+| v4.3 OEM catalog (data plumbing) | 🌓 Branched, awaiting DB | `phase-oem-catalog @ 80a33e4`. Schema + migration + three seeds committed. ~30 min to apply once a Supabase project is awake. See 23 June session above. |
+| v4.3 OEM catalog (storefront features) | ⏳ Not started | Plan to be written after the data lands. Two features: search-by-OEM-number → Dyvika `Product`; interactive parts viewer with PNG + click hotspots. |
 
 ## Verified locally as of last commit
 
@@ -337,6 +461,65 @@ Real work items that didn't make it into the phase that introduced
 them. Loose-coupled — pick any in any order. Shipped follow-ups are
 listed in the next section for posterity.
 
+### v4.3 OEM catalog follow-ups (open)
+
+All of these were migrated from `WN manuals an files/Handover-WN-data.md`
+— that doc's "Next steps" section is now stale; this list is canonical.
+
+- **Run the three OEM seeds** (after migration applies). Order
+  independent. See "To finish the OEM-catalog ingest" above. The PDF
+  seed needs `prisma/draft/wn_parts_export.json` regenerated from the
+  current SQLite first.
+- **Render diagrams for the 348 newly-ingested PDF-derived manuals.**
+  `OemComponent.diagramImageFilename` already holds expected paths
+  like `drawings/<slug>_p<NN>.png`, but the files don't exist for the
+  new manuals — `WN manuals an files/drawings/` has only the 737 PNGs
+  from the original 17 models. Adapt `render_diagrams.py` to walk the
+  SQLite, fetch PDFs from `pdfs_shop/`, and render the missing pages
+  at 150 DPI. Probably 5,000–8,000 new PNGs (~1–2 GB). For the
+  eParts-API rows there's no rendering to do — the HD PNGs are already
+  in `eparts_assets/`. ~half day.
+- **Upload `eparts_assets/` (575 MB) to Supabase Storage.** Bucket
+  `oem-diagrams` (TBD). After upload, switch
+  `OemComponent.diagramImageFilename` to a storage key + add a
+  signed-URL endpoint. Same pattern as the Phase 4.5 `backups` bucket.
+  ~2 hours. The PDF-rendered PNGs (above) get the same treatment.
+- **Recover the 22 PDFs still failing extraction** (task chip
+  `task_53d35c2e`). RC100/RC110 rollers — giant 44 MB books — plus 3
+  empty extracts. Diagnosis already established that `classify_sp` is
+  fine for these; the bug is in `extract_sp`'s diagram→parts pair
+  detection. Two paths: extend the classifier OR PDF→OCR fallback.
+  ~30 min for path A; ~half day for path B.
+- **Scrape the 8 backlog retailers** (task chip `task_9a05f5fe`). Top
+  3 (`shop.equipmentshare.com`, `neyer.de`, `htsspares.com`) need no
+  new code — just CLI args on the generic Shopify scraper. The 3
+  bot-blocked (`gciron.com`, `harcoequipment.com`, `isprzet.pl`)
+  need Chrome MCP recon first. ~2-3 h for top 3, ~half day for the
+  bot-blocked.
+- **Re-run tmsequip beyond the 10K cap.** ConvertCart caps anonymous
+  offset traversal at 10,000; reported total is 66,678.
+  `aggregations.categories[]` from the API gives per-category counts
+  (~20-300 each, all under the cap). Iterate per category and union.
+  Small modification to `scrape_tmsequip_search.py`. ~1 hour.
+- **Hand-verify a sample.** Spot-check 10-20 part rows per category
+  against the source PDFs and against retailer listings, especially
+  for SP-format models (`isRecommended` is always 0 for those — sane?)
+  and the new compact-SP series. ~1 hour.
+- **Backfill the 222 catalogue-known machines that have no eParts
+  data** as `OemMachine` rows with no revisions. The `seed-oem-eparts.ts`
+  already inserts these (they're machines that the catalogue lists but
+  the products endpoint returns `revisions: []`), so this should
+  happen automatically. Verify after seed runs.
+- **First-class sub-machine modelling.** Today the engine inside a
+  machine is flattened onto the parent's revision via
+  `OemComponent.subRevisionName`. Cleaner would be a child
+  `OemMachine` row with `parentMachineCode` set + its own revision.
+  Schema already supports it (`parentMachineCode` column exists,
+  unused). Migration: low — the column is already there. ~half day.
+- **Decide whether `wn_parts_export.json` (24 MB) should be committed
+  or kept as a regenerable artifact.** Currently regenerable, not
+  committed. See `prisma/draft/export_wn_sqlite.py`.
+
 ### Phase 4 follow-ups (open)
 
 - **PDF queue split.** Invoice PDF rendering currently runs inside the `notifications:invoice-issued` job handler. Splitting it out lets us cap concurrency separately and add a polling endpoint for "is the invoice PDF ready yet?" UX. ~half day.
@@ -422,15 +605,32 @@ The project memory file at `~/.claude/projects/C--Users-Ventura-AI/memory/projec
 
 In recommended order:
 
-1. **Verify the new automatic backup actually ran.** First 02:00 UTC tick after the latest deploy is the moment of truth. Check `/admin` — `BackupWidget` should say "Siste automatiske kjøring: for 0 dager siden (X KB)". If it still says `SKIPPED`, the operator hasn't completed `/admin/backup/setup`; do that.
-2. **Retire the Railway curl cron service.** Wait until production logs show `[maintenance] expired reservations` ticks for ~24 hours, then delete the curl service from Railway. Operational hygiene; no code work.
-3. **Add a real product** (manual create or CSV import) and walk a full money flow end-to-end: cart → checkout → reserve → AUTHORIZED → mark shipped → CAPTURED → invoice. With 0 sales today, none of the new payment-path code has been exercised against live data; the unit tests cover the math but a real-product walkthrough is the missing acceptance gate.
-4. **Phase 6 — Hardening** (CSP / admin MFA / RLS as defence-in-depth). One open decision: MFA grace period (default 7 days). 3–4 dev-days. The most operationally valuable phase remaining.
-5. **Phase 7 — Returns + Quotes + A11y + SAF-T** (compliance bundle). 4–5 dev-days.
+1. **Wake Supabase + apply the OEM-catalog migration.** Open dashboard
+   for project `iuimkzettrrqvvvgfvqp` (or `nxqqmplptalbxmfmbtfs` for
+   prod) to wake the DB, then on branch `phase-oem-catalog` run
+   `npx prisma migrate deploy` followed by the three seeds. See "To
+   finish the OEM-catalog ingest" in the 23 June session block. ~30 min.
+2. **Start v4.2 PR 1 — `phase-globalize-topbar`.** Decisions locked, no
+   chrome work needed (logo already shipped). Folder moves + caching.
+   ~1 hour.
+3. **Verify the daily backup actually ran recently.** Check `/admin` —
+   `BackupWidget` should say "Siste automatiske kjøring: for 0 dager
+   siden (X KB)". If `SKIPPED`, the operator hasn't completed
+   `/admin/backup/setup`; do that.
+4. **Retire the Railway curl cron service.** Wait until production logs
+   show `[maintenance] expired reservations` ticks for ~24 hours, then
+   delete the curl service. Operational hygiene; no code work.
+5. **Add a real product** (manual create or CSV import) and walk a full
+   money flow end-to-end: cart → checkout → reserve → AUTHORIZED →
+   mark shipped → CAPTURED → invoice. With 0 sales today, none of the
+   new payment-path code has been exercised against live data.
 
-Or, if you want to push features rather than infra: **content + product import.** The catalog scaffolding (categories, machine fitments) is in place; loading actual products is what unlocks the storefront for real customers.
+Or, if you want to push features rather than infra: **content +
+product import.** The catalog scaffolding (categories, machine
+fitments, OEM catalog after #1) is in place; loading actual products
+is what unlocks the storefront for real customers.
 
 **Smaller items if you have an hour:** any of the open follow-ups
-above. The Phase 2 `.toNumber()` cleanup is ~1 hour and purely
-cosmetic. The `/admin/sikkerhetskopier` admin page is ~half day and
-becomes useful as `BackupRun` rows accumulate.
+above. The v4.3 sub-items in particular are mostly an hour or less
+each (re-run tmsequip past the cap, hand-verify a sample,
+backfill 222 empty machines).
