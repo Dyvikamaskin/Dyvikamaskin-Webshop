@@ -241,10 +241,39 @@ async function main() {
   let totalComps = 0;
   let totalParts = 0;
 
+  let machinesSkippedFastpath = 0;
   for (let i = 0; i < files.length; i++) {
     const path = join(EPARTS_DIR, files[i]);
     const raw = await readFile(path, "utf-8");
     const json = JSON.parse(raw) as EpartsJson;
+
+    // Fast-path skip: if a previous run already populated this machine,
+    // the revision count in DB will match the JSON. Single COUNT() vs
+    // tens-of-seconds of upserts. Idempotent because the source data
+    // doesn't change between runs.
+    const expectedRevs = (json.revisions || []).length;
+    if (expectedRevs > 0) {
+      const existingRevs = await prisma.oemMachineRevision.count({
+        where: {
+          machine: {
+            code: json.machine_code,
+            source: OemCatalogSource.EPARTS_API,
+          },
+        },
+      });
+      if (existingRevs >= expectedRevs) {
+        machinesSkippedFastpath++;
+        if ((i + 1) % 25 === 0 || i === files.length - 1) {
+          const elapsed = (Date.now() - t0) / 1000;
+          console.log(
+            `  [${i + 1}/${files.length}] skipped-fastpath=${machinesSkippedFastpath} ` +
+              `machines=${machinesIngested} empty=${machinesEmpty} ` +
+              `(${elapsed.toFixed(1)}s)`,
+          );
+        }
+        continue;
+      }
+    }
 
     // Still insert an OemMachine row for empty machines — gives the
     // storefront something to display when a code is searched.

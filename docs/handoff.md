@@ -117,26 +117,50 @@ projects auto-pause after inactivity; opening either dashboard wakes
 the DB in ~2 minutes. That's the blocker for actually running the
 migration + seeds.
 
-### To finish the OEM-catalog ingest
+### OEM-catalog ingest — paused mid-flight 23 June ~21:35
 
-Two paths (Path A is safer; Path B is fine because prod has 0
-products / 0 sales — the migration is additive-only):
+Migration is applied to **prod** (`nxqqmplptalbxmfmbtfs`). Two of the
+three seeds finished cleanly; eParts is partially done and paused
+because the per-row upserts over the EU-West pooler are slow from
+this machine even on the faster connection (~14 s per active machine).
+The script is idempotent + has a fast-path skip; resuming tomorrow
+just re-runs the same command.
+
+#### Current DB state (verified 23 June 21:35)
+
+| Table | Rows | Notes |
+|---|---|---|
+| `OemMachine` (source=PDF) | **344** | ✅ complete (21 PDFs shared codes; became extra revisions) |
+| `OemMachine` (source=EPARTS_API) | **244** | ⏸️ 244 of 572 — re-run will fast-path these |
+| `OemMachineRevision` | 1,406 | growing |
+| `OemComponent` | 25,208 | growing |
+| `OemPart` | **462,806 rows · 33,416 unique partNumber** | growing |
+| `PartPriceSnapshot` | **200,386** across **7 retailers** | ✅ complete |
+
+#### To resume tomorrow morning
 
 ```bash
-# Path A — apply on supabase-dev first
-# 1. Open dashboard for project iuimkzettrrqvvvgfvqp to wake the DB
-# 2. From repo root with DATABASE_URL pointing at supabase-dev:
-npx prisma migrate deploy
-# 3. Regen the PDF export, then run all three seeds (order independent):
-python prisma/draft/export_wn_sqlite.py \
-  --db "WN manuals an files/wn_parts.sqlite" \
-  --out prisma/draft/wn_parts_export.json
-npx tsx prisma/seed-oem-eparts.ts          # ~5-10 min, ~954k parts
-npx tsx prisma/seed-oem-pdfs.ts            # ~1-2 min, ~85k parts
-npx tsx prisma/seed-part-prices.ts         # ~2-3 min, ~200k snapshots
-# 4. Verify counts, push the branch, PR, merge → Railway applies to prod
-# 5. Re-run seeds locally with DATABASE_URL = prod
+# Just re-run the eParts seed. The fast-path skip in seed-oem-eparts.ts
+# (commit on phase-oem-catalog) does ONE cheap COUNT per already-done
+# machine and continues from where it left off. Idempotent.
+npx tsx prisma/seed-oem-eparts.ts
+# Estimated remaining wall time: ~60-90 min for the ~330 unprocessed machines.
 ```
+
+If the pooler drops mid-run, just re-run — the next invocation skips
+everything that's already landed and continues. No data corruption
+risk, no manual cleanup needed.
+
+After eParts finishes — verify counts (expect ~376 EPARTS_API
+machines, ~1,000,000 OemPart rows, ~45k unique part numbers), then
+merge the PR + push.
+
+#### What's NOT needed on resume
+
+- ~~Apply migration~~ — already applied to prod
+- ~~Regenerate `wn_parts_export.json`~~ — only matters if SQLite changes
+- ~~Re-run PDF seed~~ — already complete (344 machines / 85k parts)
+- ~~Re-run prices seed~~ — already complete (200k snapshots)
 
 ## This session's deltas (skim before starting work)
 
@@ -605,11 +629,11 @@ The project memory file at `~/.claude/projects/C--Users-Ventura-AI/memory/projec
 
 In recommended order:
 
-1. **Wake Supabase + apply the OEM-catalog migration.** Open dashboard
-   for project `iuimkzettrrqvvvgfvqp` (or `nxqqmplptalbxmfmbtfs` for
-   prod) to wake the DB, then on branch `phase-oem-catalog` run
-   `npx prisma migrate deploy` followed by the three seeds. See "To
-   finish the OEM-catalog ingest" in the 23 June session block. ~30 min.
+1. **Resume the paused eParts seed** (23 June pause point). Migration
+   already applied; PDF + prices seeds done; 244/572 eParts machines
+   already in DB. Just run `npx tsx prisma/seed-oem-eparts.ts` — the
+   fast-path skip handles resume cleanly. ~60-90 min remaining. See
+   "OEM-catalog ingest — paused mid-flight" above.
 2. **Start v4.2 PR 1 — `phase-globalize-topbar`.** Decisions locked, no
    chrome work needed (logo already shipped). Folder moves + caching.
    ~1 hour.
