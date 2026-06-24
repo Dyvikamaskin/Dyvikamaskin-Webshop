@@ -1058,3 +1058,63 @@ model PartPriceSnapshot {
   @@index([retailer, scrapedAt])
   @@index([partNumber, retailer])
 }
+
+// ─── External-source enrichment listings (v4.3 prep) ─────────────────────────
+// Rich per-SKU data sourced from external retailers that publish more than
+// just SKU + price. Initial population from Neyer.de (45,735 Wacker products
+// with title, description, HD images, "Replaces" cross-refs, weight, etc.).
+// Future sources: any retailer where the data is rich enough to enrich our
+// own Product listings.
+//
+// NOT exposed to the storefront directly — admin uses these to populate
+// Dyvika `Product` rows. The PartPriceSnapshot table keeps doing
+// price-comparison; this table holds the prose / images / metadata.
+
+model OemPartListing {
+  id              String   @id @default(cuid())
+  /// Joins loose to OemPart.partNumber and Product.partNumber. Not a FK —
+  /// some external listings may have SKUs we don't yet have in OemPart.
+  partNumber      String
+  /// Source tag, e.g. 'neyer-en', 'neyer-de'. Allows the same SKU to be
+  /// stored multiple times under different locales / sources.
+  source          String
+
+  // ─── Display ─────────────────────────────────────────────────────────────
+  title           String
+  description     String?   // HTML stripped to plain text from source body_html
+  descriptionHtml String?   // Raw body_html from source (for richer admin views)
+  productType     String?   // German vocab from Neyer's product_type
+
+  // ─── Physical ────────────────────────────────────────────────────────────
+  weightGrams     Int?      // Normalised to grams regardless of source unit
+  barcode         String?
+
+  // ─── Cross-references parsed from description ────────────────────────────
+  /// SKUs this part supersedes — parsed from "Replaces item X" in body_html.
+  /// Feeds Product.replacesPartNumbers[] when we map this listing to a
+  /// Dyvika Product.
+  replacesPartNumbers String[]
+
+  // ─── Media (URLs only — not downloaded) ──────────────────────────────────
+  imageUrls       String[]
+  /// Convenience pointer to the hero image (first image in source order).
+  primaryImageUrl String?
+  imageCount      Int       @default(0)
+
+  // ─── Source provenance ───────────────────────────────────────────────────
+  sourceProductId String?   // Source platform's product id (Shopify id, etc.)
+  sourceUrl       String?   // Canonical product URL on the source site
+  sourceCreatedAt DateTime?
+  sourceUpdatedAt DateTime?
+
+  // ─── Pricing (denormalised here for convenience; canonical in PartPriceSnapshot) ─
+  price           String?
+  currency        String?
+
+  scrapedAt       DateTime @default(now())
+
+  @@unique([partNumber, source])
+  @@index([partNumber])
+  @@index([source])
+  @@index([productType])
+}
