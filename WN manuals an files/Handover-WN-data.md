@@ -109,33 +109,81 @@ where it left off.
 
 ### Next steps (revised, in priority order)
 
-1. **Watch the two background jobs land** and verify outputs:
-   - `eparts_all_machines.json` — should be 800-1000+ machines (vs our existing
-     572), with `Lighting` / `Heating` / `Power Supply` categories populated.
-     If the 80 unknowns appear under those new categories, we have closure on
-     that mystery.
-   - `eparts_pdfs/` — every Parts Manual PDF for every enumerated machine.
-     Feed through existing `extract_wn_parts.py` → `bulk_ingest_shop.py`
-     pipeline to grow `wn_parts.sqlite`.
-   - `dhs_fitment.jsonl` — structured fitment data for ~22K SKUs.
-2. **Weidemann eService catalog walk** (confirmed in-scope by inventory analysis).
-   `scrape_weidemann_catalog.py` exists and was smoke-tested. Use the dealer
-   session captured during recon. Ingest path: add `WEIDEMANN_ESERVICE` to
-   `OemCatalogSource` enum, walk all 18 catalogs, seed into `OemMachine` /
-   `OemMachineRevision` / `OemComponent` / `OemPart`. Should unlock ≥1,093
-   stocked items.
-3. **Add `legacyPartNumber String?` column to `OemPart`** and backfill via
-   `sku_legacy_modern_map.json`. Lets a single OEM row carry both numbers and
-   surface either to users searching by SKU. Schema change, but small.
-4. **Process the new Parts Manual PDFs through the existing extractor.**
-   The 313-PDF extractor should handle most; the 22 RC-series failures are
-   already known. Expect 200-500 new manuals once enumerate completes.
-5. **DHS fitment ingestion.** Once `dhs_fitment.jsonl` lands, define a new
-   schema column (e.g. `OemPartListing.compatibleMachines JSON[]`) or a join
-   table, and seed.
-6. **Re-tmsequip past 10K** (unchanged from previous handover).
-7. **Backfill 222 empty machines** and **first-class sub-machine modelling**
-   (unchanged from previous handover).
+> **The canonical TODO list lives in [`../docs/handoff.md`](../docs/handoff.md)**
+> under "24 June session" → "Tomorrow's queue". Everything below is local
+> context; the upstream list is authoritative.
+
+1. **Re-enumerate eParts properly.** Our 572-machine walk missed huge swaths
+   (EZ-series, Z3-series, many big-equipment codes). Walk
+   `/navigation/nonRevMachine/{code}` per machine to capture WNC serial ranges.
+2. **Deep-dig LS Engineers for hidden serial-range info** (tabled — was
+   interrupted by cross-origin error).
+3. **Build extended LS-only-machines seed** — 841 LS-only machines → full BOM
+   hierarchy with `source=LSENGINEERS`; 143 LS machines overlapping eParts →
+   enrich only.
+4. **Top-up Neyer seed** when overnight scrape finishes.
+5. **Process new Parts Manual PDFs** → second OemPart re-seed pass.
+6. **Re-measure inventory coverage** (target 75-80%).
+7. **Architecture target** — see `docs/oem-data-sources.md` §9 (3-environment
+   DB + 13-layer production stack).
+8. **Weidemann eService catalog walk** (still queued; `scrape_weidemann_catalog.py`
+   exists). Some overlap with LS Engineers in `1xxx` SKUs but Weidemann has
+   the dealer-side BOMs.
+9. **Re-tmsequip past 10K** (unchanged from previous handover).
+
+### Late-session additions (2026-06-24 evening)
+
+The morning's "in-flight" jobs all completed. Major additions on top of the
+section above:
+
+- **eParts Phase 1-4 finished**: 572 machines (same as yesterday — full
+  enumeration confirmed for the rev-based catalog branch), 2,180 Parts Manual
+  PDFs downloaded (7.7 GB).
+- **PDF bulk extraction**: 1,848 new extracts → `wn_parts.sqlite` grew to
+  **2,202 models / 59K assembly groups / 826K parts / 35,627 distinct SKUs**
+  (9.7× yesterday). The 22 RC-series PDFs that failed yesterday extracted
+  cleanly this run.
+- **DHS fitment scrape**: 21,511 / 24,921 (86%) DHS pages had structured
+  fitment tables. Seeded 24,950 `OemPartCompatibility` rows.
+- **Schema migration applied to prod**: `OemPart.legacyPartNumber` column +
+  `OemPartCompatibility` table + `WEIDEMANN_ESERVICE` / `LSENGINEERS` enum
+  values. Dev (`iuimkzettrrqvvvgfvqp`) NOT migrated — it's paused and on a
+  different Supabase account.
+- **LS Engineers discovered**: Cloudflare-protected Magento store, scrape
+  via Chrome MCP. Sitemap covers 4% of diagrams; the other 96% only
+  discoverable via link-graph crawling from model pages.
+- **LS Engineers walk landed**: 10,351 diagrams / **191,540 parts** /
+  **31,636 distinct SKUs** with 100% field coverage (`ref` callout #, `sku`,
+  `name`, `price_amount`, `image_url`, `lead_time`). This is BOM-quality data
+  for the 96-machine big-equipment gap eParts can't fill.
+- **LS Engineers seeded**: 21,501 `OemPartListing` rows + 60,294
+  `OemPartCompatibility` rows (after splitting comma-joined `fits_models`
+  strings — increased 2.9×).
+- **eParts catalog is BIGGER than our enumeration** captured. Live dashboard
+  for EZ26-2 (machine `1000462823`) shows ~80+ excavator codes under "Tracked
+  Zero Tail Excavators" alone. Our walk found 0 EZ-series. **Need to
+  re-enumerate via the non-rev path.**
+- **eParts DOES expose WNC serial ranges** for big-equipment via
+  `/navigation/nonRevMachine/{code}` → `sparepartsBookList[].name` field
+  (e.g., `"EZ26-2 (WNCE2401K00000140 - ...)"`). This is the natural revision
+  identifier for big-equipment machines.
+- **LS Engineers does NOT expose serial ranges** — variants are URL-slug
+  suffixes only (`-1`, `-long`, `-left/right`). Cross-source matching:
+  model name as join key, backfill WNC range from eParts.
+- **Inventory coverage today: 33% → 66.8%** (Neyer 45K + LS Engineers 21.5K
+  drove most of the lift).
+- **Taxonomy correction**: `1xxxxxxxxx` is the WN Group post-SAP range for
+  **big-equipment + agricultural** (verified on EZ80, TH627), not just
+  Weidemann/Kramer. Old hypothesis corrected in `docs/oem-data-sources.md` §1.
+
+### Files committed today
+
+| Commit | Scope |
+|---|---|
+| `5f132fe` | `.gitignore` + `CLAUDE.md` collaboration rules |
+| `9216b0d` | 30 Python tools (analysis + scrapers) |
+| `780a5bb` | KB doc + this Handover (early-session content) + auto-reports |
+| `5b7c536` | Schema migration + 3 new seed scripts + 11 late-session analysis scripts + canonical handoff update |
 
 **SQLite** — `wn_parts.sqlite` (~20 MB), `wn_parts.sqlite.bak{,2,3,4,5,6}` rollback points.
 
