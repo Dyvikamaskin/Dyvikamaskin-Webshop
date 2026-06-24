@@ -26,7 +26,8 @@ const JSONL = resolve(
   process.env.NEYER_JSONL ?? "WN manuals an files/wn_neyer_full.jsonl",
 );
 const SOURCE = process.env.NEYER_SOURCE ?? "neyer-en";
-const BATCH = 200;
+const BATCH = 50;
+const TX_TIMEOUT_MS = 30_000;
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
@@ -139,6 +140,7 @@ async function main() {
           update: data,
         });
       }),
+      { timeout: TX_TIMEOUT_MS },
     );
     written += slice.length;
     if (written % 2000 === 0 || written === unique.length) {

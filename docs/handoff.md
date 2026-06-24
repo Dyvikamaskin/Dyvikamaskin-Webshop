@@ -162,6 +162,153 @@ merge the PR + push.
 - ~~Re-run PDF seed~~ — already complete (344 machines / 85k parts)
 - ~~Re-run prices seed~~ — already complete (200k snapshots)
 
+## 24 June session — inventory analysis + LS Engineers BOMs + coverage doubling
+
+**Headline:** inventory coverage went from **33% → 66.8%** in one session. Three
+big finds: corrected `1xxxxxxxxx` SKU taxonomy (it's the WN Group's
+post-SAP range for big-equipment + agricultural, NOT just Weidemann/Kramer);
+LS Engineers exposes a full BOM-style catalog for the 96-machine big-equipment
+gap eParts can't fill; and the eParts catalog has many more machines than our
+572-machine enumeration captured.
+
+### Committed today (branch `phase-oem-catalog`, prior to today's work)
+
+| Commit | What |
+|---|---|
+| `5f132fe` | `.gitignore` for `WN manuals an files/` data + `CLAUDE.md` collaboration rules |
+| `9216b0d` | 30 Python scripts under `WN manuals an files/` (analysis + scrapers + seeds) |
+| `780a5bb` | `docs/oem-data-sources.md` knowledge base + `Handover-WN-data.md` + 4 auto-reports |
+
+### What's pending commit (today's late-session work)
+
+- `prisma/schema.prisma` — adds `OemPart.legacyPartNumber`, `OemPartCompatibility` table,
+  `WEIDEMANN_ESERVICE` + `LSENGINEERS` enum values
+- `prisma/migrations/20260624200000_oem_compat_legacy_enums/migration.sql` — DDL, applied to prod
+- `prisma/seed-oem-listings.ts` (patched) — `BATCH=50` + `TX_TIMEOUT_MS=30000` to fix Prisma
+  transaction timeout that killed the first Neyer seed
+- `prisma/seed-dhs-fitment.ts` — new seed for DHS Compatibility & Fitment data
+- `prisma/seed-lsengineers.ts` — new seed for LS Engineers listings + fitment
+- 10 new analysis scripts under `WN manuals an files/`
+- `docs/oem-data-sources.md` — updated with corrected taxonomy, LS Engineers retailer entry,
+  3-environment / 13-layer architecture targets, dev-DB orphan note
+
+### Pipeline runs that completed today
+
+| Job | What | Output |
+|---|---|---|
+| **eParts Phase 1-4** | Enumerate + download Parts Manuals (the missing piece from yesterday) | 572 machines confirmed; 2,180 Parts Manual PDFs (7.7 GB) downloaded |
+| **PDF bulk extract** | Process new PDFs through dual-layout extractor | 1,848 new extracts; **22 RC-series PDFs that failed yesterday extracted cleanly this run** |
+| **PDF bulk ingest → SQLite** | Grow `wn_parts.sqlite` | **2,202 models / 59K assembly groups / 826K parts / 35,627 distinct SKUs** (9.7× yesterday) |
+| **OemPart re-seed (prod)** | Refresh Supabase with new PDF data | Multi-hour run; idempotent |
+| **DHS fitment scrape** | Extract structured `<table class="fitment-table">` from 24,921 DHS pages | 21,511 with fitment (86%); seeded **24,950 OemPartCompatibility rows** |
+| **Neyer 14,644 listings seed** | `OemPartListing` source=neyer-en | 14,644 rows seeded; deep scrape continued in background |
+| **LS Engineers sitemap recon** | Fetch `media/sitemap.xml` + 7 sub-sitemaps | 277,334 URLs; 26,186 Wacker; 21,505 part-pages + ~4,680 categories |
+| **LS Engineers walk Phase 5a** | Iterative discovery via link-graph (sitemap only covers 4% of diagrams!) | Converged at **10,351 distinct diagram URLs** spanning all WN machine types |
+| **LS Engineers walk Phase 5b** | Fetch each diagram page, parse embedded `"items":[...]` JSON | **10,351 diagrams / 191,540 parts / 31,636 distinct SKUs**; 100% field coverage (`ref` callout #, `sku`, `name`, `price_amount`, `image_url`, `lead_time`) |
+| **LS Engineers seed (listings + fits)** | After splitting comma-joined `fits_models` strings | **21,501 `OemPartListing` rows** + **60,294 `OemPartCompatibility` rows** |
+
+### Key findings (added this session)
+
+- **`1xxxxxxxxx` taxonomy correction.** Earlier hypothesis "Weidemann/Kramer only"
+  was wrong. Verified on WN EZ80 mini-excavator + TH627 telehandler — both use
+  `1000xxxxxx` SKUs. **`1xxxxxxxxx` is the WN Group post-SAP numbering for the
+  entire big-equipment + agricultural range** (excavators, telehandlers, wheel
+  loaders, dumpers, Weidemann, Kramer). KB doc §1 + Handover both updated.
+- **DHS reclassified as multi-brand** (not WN construction only). Carries 86,513
+  `1xxx` SKUs; covers 84.6% of stocked inventory; single best price source.
+- **eParts BOM coverage is sparse for big equipment.** Of our 572 machines,
+  only **256 have actual parts data**; 96 big-equipment machines (excavators,
+  loaders, telehandlers, dumpers, attachments, skid steers) return empty BOMs
+  from the public eParts API. Operating manuals exist but no parts manuals.
+- **LS Engineers fills the big-equipment gap.** 21,505 unique SKUs derived from
+  sitemap + 10,351 BOM-style diagrams from link-graph crawl. 841 LS-only
+  machines (TH-telehandlers, ET-excavators, etc.) that have **no equivalent in
+  eParts**. For 376 eParts machines with BOMs, LS overlap is mostly small-machine
+  (121 strong matches with Jaccard > 0.3); for big-machines like DPU 100-70,
+  eParts goes deeper (645 vs 267 SKUs because it walks sub_revisions like Engine).
+- **eParts catalog is larger than our enumeration** found. Live dashboard for
+  EZ26-2 (machine `1000462823`) shows ~80+ excavator codes under "Tracked Zero
+  Tail Excavators" alone — our enumeration found 0 EZ-series. We missed
+  hundreds of machine codes by not following the non-rev navigation path.
+- **eParts DOES expose WNC serial-number ranges** via `/navigation/nonRevMachine/{code}`
+  endpoint — sparepartsBookList[].name is e.g. `"EZ26-2 (WNCE2401K00000140 - ...)"`.
+  This is the natural revision identifier for big-equipment machines.
+- **LS Engineers does NOT expose serial-number ranges.** Variants are
+  distinguished by URL slug suffixes only (`-1`, `-long`, `-left/right`) — no
+  WNC, no AF/AI codes, no revision numbers in description or attributes.
+- **Inventory shape (`Inventory DM-WN.xlsx`).** 2,371 stocked SKUs, split:
+  1,276 `5xxx` Wacker construction, 1,094 `1xxx` Weidemann/Kramer/big-equipment, 1 legacy.
+
+### Coverage trajectory today
+
+| State | Stocked SKUs covered | % |
+|---|---:|---:|
+| Session start (eParts + 313 PDFs) | 783 | 33.1% |
+| + Legacy↔modern mapping (49,365 pairs) | +30 | 34.3% |
+| + Neyer 45K SKUs ingested | +410 | 50.4% |
+| + LS Engineers 21,505 SKUs | +388 | **66.8%** |
+| Residual gap | 788 | 33.2% |
+
+The residual 788 splits roughly 394 `5xxx` / 394 `1xxx` / 1 legacy.
+
+### Schema migration applied 2026-06-24 ~20:00 UTC (prod only)
+
+Migration `20260624200000_oem_compat_legacy_enums` applied to **prod
+(`nxqqmplptalbxmfmbtfs`)** via `mcp__supabase__execute_sql`. Adds:
+
+1. `OemPart.legacyPartNumber String?` + index (backfill from `sku_legacy_modern_map.json`)
+2. `OemCatalogSource` enum: + `WEIDEMANN_ESERVICE`, + `LSENGINEERS`
+3. New `OemPartCompatibility` table (keyed by `partNumber`, NOT FK to `OemPart` —
+   compatibility is a property of the SKU itself, not a catalog row)
+
+Dev `iuimkzettrrqvvvgfvqp` is **paused + lives under a different Supabase account**
+(prod token can't see it). Migration **not applied to dev**. See
+[`oem-data-sources.md`](oem-data-sources.md) §9 for the dev-DB orphan question.
+
+### Background jobs still running at session end
+
+| Job | Status |
+|---|---|
+| `bm52g0yih` Neyer deep scrape | ~30% done last check; will run overnight, hits ~45,584 SKUs total |
+| `bpzt7jipp` OemPart re-seed (eParts+PDFs) | Multi-hour Supabase upsert run; safe to leave |
+
+### Tomorrow's queue (in priority order)
+
+1. **Re-enumerate eParts properly.** Yesterday's 572-machine walk missed huge
+   swaths — EZ-series, Z3-series, TH-series, and many non-rev machine codes. The
+   `/navigation/nonRevMachine/{code}` + `sparepartsBookList[].name` endpoints
+   give us the WNC serial range per machine. Expected real count: 1,500-2,500
+   machines (vs 572 captured). Need to walk every category leaf, then for each
+   product hit `nonRevMachine` to get the spareparts-book list.
+2. **Deep-dig LS Engineers for hidden serial-range info.** I only checked the
+   model page — part-detail pages, assembly descriptions, JSON-LD blocks, hidden
+   meta tags may have it. Tabled at end of session (interrupted by re-fetch
+   cross-origin error).
+3. **Build the extended LS-only-machines seed.** Plan committed in `oem-data-sources.md`:
+   - For the **841 LS-only machines** → seed full `OemMachine/Revision/Component/Part`
+     hierarchy with `source=LSENGINEERS`
+   - For the **143 LS machines overlapping eParts** → don't duplicate BOM, just
+     enrich via `OemPartListing` (already seeded) + `OemPartCompatibility` (seeded)
+   - Use eParts machine code + WNC serial range from the re-enumeration above
+     to enrich LS-derived machines (model name as join key)
+4. **Top-up Neyer seed** when deep scrape finishes (currently at 14,644 of 45,584).
+   Just re-run `prisma/seed-oem-listings.ts` — idempotent.
+5. **Process the new Parts Manual PDFs through extractor** then re-seed OemPart
+   (this is the second pass — first one is still running tonight).
+6. **Re-measure inventory coverage** after all the above lands. Target: ~75-80%.
+7. **Architecture target** (`docs/oem-data-sources.md` §9): set up real dev/staging
+   environments, CI/CD pipeline, RLS policies, Sentry. None of layers 4-13 of
+   the production stack are in place yet.
+
+### Files committed at end of 24 June (covering today's work)
+
+| Commit | What |
+|---|---|
+| `5f132fe` | `.gitignore` + CLAUDE.md collaboration rules |
+| `9216b0d` | 30 Python scripts (analysis + scrapers) |
+| `780a5bb` | `docs/oem-data-sources.md` KB + Handover update + auto-reports |
+| (next commit, end of 24 June) | schema migration + new seeds + late-session scripts + this handoff update |
+
 ## This session's deltas (skim before starting work)
 
 Seven small follow-ons landed:

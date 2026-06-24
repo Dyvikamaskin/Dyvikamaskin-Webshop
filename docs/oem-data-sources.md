@@ -14,25 +14,36 @@ for what, and whether a data source is worth ingesting.
 ## 1. SKU prefix taxonomy (Wacker Neuson Group SAP)
 
 The Wacker Neuson Group uses a 10-digit SAP material number for current parts.
-The **prefix digit indicates which division owns the part**:
+The **prefix digit indicates which product family** the part belongs to:
 
-| Prefix       | Division / brand                          | What it covers                            |
-|--------------|-------------------------------------------|-------------------------------------------|
-| `0xxxxxx`    | Legacy Wacker Neuson (7-digit, pre-SAP)   | Older construction equipment              |
-| `5xxxxxxxxx` | **Wacker Neuson construction (SAP)**      | Mini excavators, wheel loaders, rammers, plate compactors, light towers |
-| `1xxxxxxxxx` | **Weidemann + Kramer (SAP)**              | Hoftracs, telehandlers, agricultural wheel loaders |
+| Prefix       | Family                                     | What it covers                                               |
+|--------------|--------------------------------------------|--------------------------------------------------------------|
+| `0xxxxxxx`   | Legacy WN (7-digit, pre-SAP)               | Older construction equipment                                 |
+| `5xxxxxxxxx` | **WN light construction (SAP)**            | Compaction (plates, rammers), pumps, lighting, heating, power supply, demolition breakers, concrete technology, generators |
+| `1xxxxxxxxx` | **WN Group big-equipment + agricultural (SAP)** — Wacker EZ-series mini excavators (Zero Tail), TH-series telehandlers, larger excavators, wheel loaders, dumpers; Weidemann Hoftracs; Kramer wheel loaders |
 
-A SKU's prefix tells you what kind of machine it fits. This is load-bearing for
-everything below.
+> **Important correction (2026-06-24):** The `1xxxxxxxxx` prefix is **not**
+> "Weidemann/Kramer agricultural only" — that was the initial hypothesis based
+> on the Neyer catalog. Subsequent verification on the WN EZ80 mini excavator
+> (`/shop-by-brand/wacker.html` → "Wacker Zero Tail Mini Excavator Parts"
+> shows all parts with `1000xxxxxx` SKUs) and on TH627 telehandlers proved the
+> prefix is shared across the entire WN Group's post-SAP big-equipment +
+> agricultural range. The reason eParts portal has empty BOMs for the
+> 96 big-equipment machines is **distribution restriction** (dealer-only),
+> not separate numbering.
 
 ### Why this matters
 
 Our current OEM catalog (`OemPart` table) came from:
 - `shop.wackerneuson.com/eparts` API (572 machines) — almost entirely `5xxxxxxxxx` and `0xxxxxxx`
-- 313 Wacker Neuson PDFs — same prefix mix
+- 2,200 Wacker Neuson PDFs (after Phase 4 download on 2026-06-24) — same prefix mix
 
-So **our catalog is the construction-equipment side of the group only**. The
-agricultural side (Weidemann/Kramer, `1xxxxxxxxx`) is not represented yet.
+So **our catalog covers WN light construction only**. The big-equipment
+families (excavators, telehandlers, wheel loaders, dumpers, attachments,
+skid steers — 96 machines, all `1xxxxxxxxx`) and the Weidemann/Kramer
+agricultural families are not represented in our BOM tables. Coverage there
+depends on **retailer-derived data** (Neyer, LS Engineers, DHS) — see §6
+below.
 
 ---
 
@@ -148,6 +159,13 @@ sitemap (`sitemap_products_N.xml`) to get the full handle list, then hit
 `/products/<handle>.json` per item. Implemented in `dedupe_neyer_sitemap.py` +
 `scrape_neyer_full.py`. **Apply the same trick to tmsequip** (currently capped
 at 10K via ConvertCart).
+
+### New retailer queue (discovered 2026-06-24, not yet scraped)
+
+| Retailer                          | Platform              | Why interesting | Status |
+|-----------------------------------|----------------------|-----------------|--------|
+| **`lsengineers.co.uk`**           | Magento (Cloudflare-protected) | Carries Wacker EZ-series excavators, TH-series telehandlers, dumpers, mini excavators — exactly the `1xxxxxxxxx` big-equipment families our eParts walk got 0 parts for. Pages are structured as **assembly catalogs** (BOM-style) with SKU + name + GBP price + image per part. ~22 top-level Wacker categories. URL pattern: `/wacker-<model>-<variant>-<machine-type>-parts.html` → `/<assembly-name>-for-wacker-<model>-<type>.html` → individual `/<slug>-oem-no-NNNNNN.html` part pages. Plain HTTP returns Cloudflare challenge — must scrape via Chrome MCP using live browser session. | **Scrape in progress 2026-06-24** (Chrome-MCP-driven, depth-bounded, strict `URL must contain "wacker"` filter, fetch cap 5,000). First-pass-halted snapshot: 1,964 parts / 661 distinct SKUs. Full run aims for ~5K+ assembly pages, expected 10–30K distinct Wacker SKUs. |
+| **`wackerneusonparts.parts`**     | Unknown — needs recon | URL implies a dedicated Wacker Neuson parts site (`/collections/all-parts` looks like a Shopify collection path → likely Shopify). Worth recon for: (1) is it sanctioned/branded? (2) catalog scope (3) SKU prefix mix (4) overlap with our existing data. | **Not yet recon'd.** Start at `https://wackerneusonparts.parts/collections/all-parts`. If Shopify, the generic `scrape_shopify_collection.py` should handle it directly. |
 
 ---
 
@@ -271,6 +289,7 @@ both numbers and surface either to users searching by SKU.
 | Pricing for stocked items (DM-WN inventory)   | **DHS** (84.6% hit rate) > neyer > tmsequip > danseusa > russopower |
 | Enrichment (title, image, description) for WN | The retailer CSVs (best names: dhs, hydrotech)        |
 | Anything Weidemann / Kramer (agricultural)    | **`service.weidemann.de` + neyer.de** — confirmed in scope (46% of stock) |
+| Big-equipment parts (Wacker EZ, TH, dumpers, loaders) | **`lsengineers.co.uk`** (Magento, Cloudflare; assembly-level structured catalogs, GBP prices) |
 | Bridging old-PDF ↔ new-API part numbers       | `sku_legacy_modern_map.csv` (49K pairs)               |
 
 ---
@@ -279,8 +298,76 @@ both numbers and surface either to users searching by SKU.
 
 - Is there a Kramer-side equivalent of `service.weidemann.de`? (haven't looked)
 - Wacker Neuson dealer portal (`partsplus`) — gated, never tested whether we can get a login
-- The 22 RC-series PDFs that failed extraction — are there alternative manuals from the WN service site?
+- The 22 RC-series PDFs that failed extraction — are there alternative manuals from the WN service site? *(Resolved 2026-06-24 — re-extracted cleanly from today's larger Parts Manual download.)*
 - **Where do the 80 truly-unknown stocked SKUs live?** They're in no retailer, no OEM, no Weidemann sample, and have no legacy equivalent in our mapping. Mostly look like HL/G-series light tower + heater equipment (530SE/535RSE control boxes, capacitors, P.E. cells) plus a DPU100-70 repair kit. The eParts portal may have a separate "Service Kits" or "Light Equipment" navigation branch our scraper didn't traverse — worth a Chrome-session recon.
+
+## 9. Infrastructure TODOs
+
+Reference targets we've committed to following (source docs:
+`C:\Users\Ventura AI\Documents\3 layer database.docx` and
+`C:\Users\Ventura AI\Documents\13 layer model.docx`).
+
+### Three-environment database model (Dev / Staging / Prod)
+
+We're currently in the "vibe-coding trap" the source doc warns against:
+**everything points at prod**. The target model is three watertight
+environments with their own data and rules.
+
+| Env       | Purpose                                              | Data                          | Rules                                                    |
+|-----------|------------------------------------------------------|-------------------------------|----------------------------------------------------------|
+| **Dev**   | AI agents + humans write code, experiment, break things | Synthetic or anonymised only — **never real customer data** | Isolated; any destructive query is harmless              |
+| **Staging** | Generalprøve — exact prod mirror without real users | Mirrored / anonymised, matching prod in structure + volume | Only CI/CD writes here (no manual edits). Broken Staging = blocked release. |
+| **Prod**  | Live customer-facing system                          | Real production + sensitive personal data | Locked down: RLS enforced, continuous data-quality monitoring, only fully-tested CI/CD deploys reach it |
+
+**Current state vs target:**
+- Have one DB only (prod `nxqqmplptalbxmfmbtfs`); `iuimkzettrrqvvvgfvqp`
+  exists but is orphaned + under a different Supabase account
+- No staging env at all
+- No CI/CD pipeline gating deploys
+- No RLS policies enforced yet
+- Migration `20260624200000_oem_compat_legacy_enums` applied to prod only
+
+**Decisions needed:**
+- (a) Wake `iuimkzettrrqvvvgfvqp`, bring under prod's Supabase org, designate
+  as Dev; provision a third project as Staging; rotate `.env` →
+  `.env.local` (dev), `.env.staging`, `.env.production`
+- (b) Provision two fresh projects under prod's org and discard the orphan
+- (c) Decide we only need 2 envs (skip staging) — not what the source doc
+  recommends
+
+### Thirteen-layer production stack
+
+Source doc's claim: most AI-built apps stop at layers 1-3; the other 10 layers
+separate a prototype from a 10,000-user production system. We should
+explicitly target every layer for the storefront. Coverage today:
+
+| Layer | Concern | Status |
+|-------|---------|--------|
+| 1. Frontend foundations | UI + state | 🟡 Partial — Next.js 16 app exists; v4.2 redesign in progress |
+| 2. APIs & backend logic | Server logic, API routes | 🟡 Partial — Next.js route handlers exist |
+| 3. Database & Storage | Schema + persistence | 🟢 Active — Postgres via Supabase, Prisma 7. Supabase Storage not yet used (eparts_assets/ + drawings/ are still local) |
+| 4. Auth & permissions | User identity + access control | ❌ Not yet set up |
+| 5. Hosting & deployment | Where the app runs | 🟡 Vercel (assumed — needs confirmation) |
+| 6. Cloud & compute | Infra primitives | 🟡 Supabase + Vercel |
+| 7. CI/CD & version control | Automated test/deploy gates | ❌ Only git + manual `npx prisma migrate deploy`; no automated pipeline |
+| 8. Security & RLS | Data-level access control | ❌ No RLS policies on any OEM tables yet |
+| 9. Rate limiting | API abuse protection | ❌ Not configured |
+| 10. Caching & CDN | Latency + global performance | 🟡 Vercel CDN by default; no DB-layer caching |
+| 11. Load balancing & scaling | Traffic distribution | 🟡 Vercel auto-scales serverless |
+| 12. Error tracking & logging | Crash detection (e.g. Sentry) | ❌ Not configured |
+| 13. Availability & recovery | Backups + disaster recovery | 🟡 Supabase point-in-time recovery (default) |
+
+**Net read:** layers 3 (DB schema) and 1-2 (frontend/backend) are alive; **almost everything else is either default Vercel/Supabase behaviour or missing**. The orphaned dev DB, missing RLS, missing CI/CD pipeline, and missing error tracking are the largest concrete gaps.
+
+### Concrete actions queued
+
+- [ ] Decide dev/staging/prod plan (a / b / c above)
+- [ ] Migrate schema to the chosen dev + staging DBs (replay `20260624200000_oem_compat_legacy_enums` + earlier migrations)
+- [ ] Switch `.env` from a single prod URL to `.env.local` / `.env.staging` / `.env.production`
+- [ ] Add a CI/CD pipeline that runs `prisma migrate deploy` on staging on every merge to `main`, then prod on tag
+- [ ] Define + enable RLS policies on the OEM tables (`OemMachine`, `OemPart`, `OemPartListing`, `OemPartCompatibility`, etc.)
+- [ ] Wire Sentry (or equivalent) for layer 12
+- [ ] Document this stack target in `docs/handoff.md` as the canonical "where the app should be" reference
 
 ---
 
@@ -303,3 +390,16 @@ both numbers and surface either to users searching by SKU.
   SKUs (82% of a Weidemann eService sample) on top of its WN construction
   coverage. DHS is now the single best price source for stocked inventory
   (84.6% hit rate).
+- **2026-06-24** **Corrected §1 SKU taxonomy.** `1xxxxxxxxx` is *not*
+  Weidemann/Kramer-only — it's the WN Group post-SAP numbering for the entire
+  big-equipment + agricultural side: WN EZ-series mini excavators, TH-series
+  telehandlers, larger excavators, wheel loaders, dumpers, attachments, plus
+  Weidemann + Kramer. Verified on EZ80 (`/wacker-zero-tail-mini-excavator-parts.html`
+  → 56 SKUs, 100% `1000xxxxxx`) and TH627. This means the 96-machine
+  big-equipment gap in our catalog is roughly the same population as the
+  `1xxxxxxxxx`-coverage gap.
+- **2026-06-24** Added two retailers to the queue:
+  **`lsengineers.co.uk`** (Magento + Cloudflare, structured assembly-level
+  catalogs for Wacker EZ/TH/excavators/telehandlers — Chrome-MCP scrape in
+  progress) and **`wackerneusonparts.parts`** (likely Shopify, not yet
+  recon'd). See §4 → "New retailer queue".

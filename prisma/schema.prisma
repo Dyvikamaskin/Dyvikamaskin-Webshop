@@ -912,9 +912,11 @@ model BackupRun {
 // + extracted PDF parts books.
 
 enum OemCatalogSource {
-  EPARTS_API // shop.wackerneuson.com /ws/v2/amd/* — preferred
-  PDF        // legacy parts books (PDFs) extracted via pdfplumber/fitz
-  MANUAL     // hand-entered fallback
+  EPARTS_API         // shop.wackerneuson.com /ws/v2/amd/* — preferred
+  PDF                // legacy parts books (PDFs) extracted via pdfplumber/fitz
+  WEIDEMANN_ESERVICE // service.weidemann.de/catalogcreator — dealer-gated agricultural BOMs
+  LSENGINEERS        // lsengineers.co.uk Magento BOM hierarchy (assembly→parts) for big equipment
+  MANUAL             // hand-entered fallback
 }
 
 model OemMachine {
@@ -1022,11 +1024,17 @@ model OemPart {
   isRecommended   Boolean @default(false)
   /// Free-form notes — measurement, torque, serial-range caveats etc.
   notes           String?
+  /// Legacy 7-digit `0xxxxxxx` SAP cross-reference for parts that were
+  /// renumbered when WN migrated to SAP. Backfilled from
+  /// `sku_legacy_modern_map.json` (mined from retailer URL slugs + PDFs).
+  /// Lets the storefront search match either number.
+  legacyPartNumber String?
 
   component OemComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
 
   @@index([componentId])
   @@index([partNumber])
+  @@index([legacyPartNumber])
 }
 
 // ─── Retailer pricing snapshots (admin-only analytical table) ────────────────
@@ -1117,4 +1125,39 @@ model OemPartListing {
   @@index([partNumber])
   @@index([source])
   @@index([productType])
+}
+
+// ─── Cross-machine fitment (compatibility) ───────────────────────────────────
+// "This SKU fits these machines." Captured from retailer compatibility tables
+// (DHS structured `fitment-table`; LS Engineers "Fits Models" lists; future
+// sources). Keyed by partNumber (string), not by an OemPart FK — because the
+// same SKU can appear in many OemPart rows (different machines/components)
+// and fitment is a property of the SKU itself, not a specific catalog entry.
+//
+// One row per (partNumber, machineModel, source) triple. The
+// `machineNumbers[]` field holds SAP material numbers for variant matches
+// (e.g. DHS lists `5000008060, 5000009545, 5000009472, 5000630045` for the
+// same model row).
+
+model OemPartCompatibility {
+  id             String   @id @default(cuid())
+  /// The SKU this row's fitment applies to. Joins loosely to OemPart.partNumber.
+  partNumber     String
+  /// Manufacturer model code, e.g. "WP1540AW", "TH627", "DPU3060H-TS".
+  machineModel   String?
+  /// Descriptive machine name, e.g. "Vibratory Plate, 15kN, 400mm".
+  machineName    String?
+  /// SAP material numbers for the machine(s) this model code refers to.
+  /// DHS publishes these; LS Engineers usually doesn't.
+  machineNumbers String[]
+  /// Source tag, e.g. "dhs" | "lsengineers".
+  source         String
+  /// URL of the source product page that yielded this row.
+  sourceUrl      String?
+  scrapedAt      DateTime @default(now())
+
+  @@unique([partNumber, machineModel, source])
+  @@index([partNumber])
+  @@index([machineModel])
+  @@index([source])
 }
