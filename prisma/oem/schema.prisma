@@ -1,0 +1,402 @@
+// Lean OEM-catalog schema — hosted in its own Supabase project
+// (rtzcrngduscrhgozrojv, BojoIndAI1's Org, free tier).
+//
+// Design goals:
+//   • Canonical Part catalog (~35K rows) — partNumber is unique, aliases[]
+//     covers legacy & cross-references. Replaces the denormalized OemPart
+//     "BOM line" rows in the Dyvika prod DB.
+//   • Narrow PartLine junction (~1.5M rows) — just (diagramId, partId,
+//     callout, qty, notes). No part metadata duplicated here.
+//   • Machine + MachineRevision unified for numeric-rev (small construction)
+//     and serial-range (big-equipment) catalogs. Mode flag tells which.
+//   • Diagram == an assembly drawing with click-hotspots. Image bytes live
+//     in Supabase Storage; this table only carries the storage key.
+//   • Accessories represented as separate Machine rows with parentMachineId.
+//
+// Reads are driven from a second Prisma client in the Dyvika app:
+//   import { PrismaClient as OemPrismaClient } from "@/app/generated/oem-prisma"
+
+generator client {
+  provider = "prisma-client"
+  output   = "../../src/app/generated/oem-prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // URLs supplied via prisma/oem/prisma.config.ts (Prisma 7 mandates config-file
+  // datasource URLs). Pass --config prisma/oem/prisma.config.ts to all
+  // OEM-related prisma CLI commands.
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+/// Where a piece of data originated. Tells the storefront which renderer +
+/// what fields to trust on each row.
+enum OemCatalogSource {
+  EPARTS_API          // shop.wackerneuson.com /ws/v2/amd/*
+  PDF                 // factory parts-book PDFs extracted via pdfplumber/fitz
+  WEIDEMANN_ESERVICE  // service.weidemann.de — dealer-gated agricultural BOMs
+  LSENGINEERS         // lsengineers.co.uk Magento BOMs (big-equipment fill)
+  MANUAL              // hand-entered fallback
+}
+
+/// Distinguishes the two revision styles WN uses across categories. Small
+/// construction has numeric revs ("108"); big equipment uses WNC serial-range
+/// books ("WNCE2401K00000140 — ..."). Some machines have both.
+enum RevisionMode {
+  NUMERIC       // revisionTag = "108", "107", ...
+  SERIAL_RANGE  // revisionTag = "WNCE2401K00000140 — WNCE2401K00009999" etc.
+}
+
+/// Listing source for the per-SKU enrichment table (Neyer/LS Engineers/etc.).
+enum ListingSource {
+  NEYER_EN
+  NEYER_DE
+  LSENGINEERS
+  WEIDEMANN_ESERVICE
+  OTHER
+}
+
+/// Compatibility / fitment source.
+enum CompatSource {
+  DHS
+  LSENGINEERS
+  EPARTS_API
+  MANUAL
+}
+
+// ─── Machines ─────────────────────────────────────────────────────────────────
+
+/// A machine in the OEM catalog. Multiple Machine rows can share a
+/// `modelName` ("EZ38" has many SAP machine-numbers, each a separate row).
+/// Accessory machines (e.g. HPU8 hydraulic power unit) carry parentMachineId
+/// pointing at the host machine — they have their own BOM but are exposed
+/// from the parent's dropdown in eParts.
+model Machine {
+  id                String           @id @default(cuid())
+
+  /// Source-side identity (SAP machine number for eParts, internal slug
+  /// for LS Engineers / Weidemann / manual).
+  code              String
+  source            OemCatalogSource
+
+  /// Display name as the source published it (may include trailing SAP code
+  /// or category words, e.g. "803 Excavator,Track,ROP's,DPU").
+  displayName       String
+
+  /// Canonical model token — lowercased, no separators
+  /// (e.g. "ez38", "th627", "bpu2540aus"). Primary join key across sources
+  /// when SAP code isn't comparable (LS↔eParts).
+  modelName         String
+
+  /// Category breadcrumb from the source catalog. JSON array of strings.
+  /// e.g. ["Excavators","Tracked Excavators","Tracked Conventional Tail"].
+  categoryPath      Json?
+
+  /// Parent machine when this is an accessory exposed under another machine
+  /// (e.g. HPU8 hydraulic power unit under 803). Self-referential nullable
+  /// FK; cascade-detach on parent delete (keep accessory rows).
+  parentMachineId   String?
+  parentMachine     Machine?  @relation("MachineAccessories", fields: [parentMachineId], references: [id], onDelete: SetNull)
+  accessories       Machine[] @relation("MachineAccessories")
+
+  /// Primary image URL — Supabase Storage key OR remote URL. Filled lazily.
+  primaryImageUrl   String?
+
+  /// Free-form metadata blobs from the source — kept as JSON to absorb
+  /// source-specific fields without schema churn.
+  summary           String?
+  description       String?
+  brochures         Json?
+
+  /// Discontinued / current flag from the source ("Current Products"
+  /// vs "Discontinued Products" in eParts facets).
+  isDiscontinued    Boolean   @default(false)
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  revisions         MachineRevision[]
+  partListings      PartListing[]
+  compats           PartCompatibility[]
+
+  @@unique([code, source])
+  @@index([modelName])
+  @@index([parentMachineId])
+}
+
+/// One revision of a Machine. A revision is the BOM-identity unit — its
+/// `sparePartListCode` is what the eParts dropdown returns as the canonical
+/// parts-book code. Diagrams hang off MachineRevision.
+///
+/// Multiple revisions can share a `sparePartListCode` (means same BOM,
+/// different production runs) — we still create separate rows for traceability
+/// but the diagrams below are physically the same drawings.
+model MachineRevision {
+  id                 String        @id @default(cuid())
+  machineId          String
+
+  /// Source identifier for the revision: "108" (numeric) or "AF00894"
+  /// (production identifier) — display only.
+  revisionTag        String
+
+  /// Numeric (small construction) vs serial-range (big equipment).
+  mode               RevisionMode
+
+  /// BOM identity from eParts: sparepartsBookList[].code. Multiple revisions
+  /// may share this (BOM-stable); some have unique codes per revision.
+  sparePartListCode  String?
+
+  /// Whether the source claims this revision has a BOM tree (vs operating
+  /// manuals only). From eParts: revisions[].hasBomTree.
+  hasBom             Boolean       @default(false)
+
+  /// Production-identifier range, if exposed (big-equipment only).
+  afCode             String?       // e.g. "AF00894"
+  aiCode             String?       // e.g. "AI00500"
+
+  /// WNC serial-number range — primary identifier for big-equipment
+  /// revisions. NULL on numeric-rev machines.
+  serialFrom         String?       // e.g. "WNCE2401K00000140"
+  serialTo           String?       // e.g. "WNCE2401K00009999", or NULL for open-ended
+
+  /// Free-form revision name as the source published it (often the entire
+  /// "EZ38 (AF00894/AI00500 - ...) (WNCE0702NPAL00160 - ...)" string).
+  rawName            String?
+
+  /// PDF and image artefacts associated with the revision.
+  imageUrl           String?
+  partsManualUrl    String?
+  partsManualFilename String?
+  operatingManuals   Json?         // [{lang, url, filename, size}]
+
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  machine            Machine       @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  diagrams           Diagram[]
+
+  @@unique([machineId, revisionTag])
+  @@index([machineId])
+  @@index([sparePartListCode])
+  @@index([serialFrom])
+}
+
+// ─── Diagrams ─────────────────────────────────────────────────────────────────
+
+/// One assembly diagram (= eParts component / PDF page).
+model Diagram {
+  id                    String      @id @default(cuid())
+  revisionId            String
+
+  /// Sort order from the source (eParts position field).
+  position              Int?
+
+  /// Human name of the assembly, e.g. "Vibration Plate", "Engine GX160".
+  name                  String
+
+  /// Stable cross-ref into the source catalog. For eParts this is
+  /// subProductCode; lets us re-fetch the same component without re-walking.
+  componentCode         String?
+
+  /// Per-component revision (distinct from parent MachineRevision).
+  revisionLevel         String?
+
+  /// When the diagram lives under a named sub-revision in the source
+  /// (e.g. "Engine GX160" as a sub-tree of revision 108). Null for top-level.
+  subRevisionName       String?
+
+  /// Storage key for the diagram PNG. Empty until we run the upload phase.
+  /// During transition this can hold a remote URL.
+  diagramImageKey       String?
+  /// Original source media id (Hybris reference) — useful for re-fetch.
+  diagramImageSourceId  String?
+
+  /// `.hd3` click-hotspots inlined ({calloutId → rect}). Drives the
+  /// interactive parts viewer. Typical size ~1 KB.
+  hotspotsJson          Json?
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  revision              MachineRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  lines                 PartLine[]
+
+  @@unique([revisionId, componentCode])
+  @@index([revisionId])
+  @@index([componentCode])
+}
+
+// ─── Parts ────────────────────────────────────────────────────────────────────
+
+/// Canonical part catalog — one row per physical part identity.
+/// `aliases[]` collects every alternate code that points at this part
+/// (legacy 7-digit SAP, cross-references from retailer SKUs, etc.).
+///
+/// Search by either modern or legacy number:
+///   WHERE partNumber = $1 OR $1 = ANY(aliases)
+model Part {
+  id              String   @id @default(cuid())
+
+  /// Canonical part number — modern 10-digit form preferred when known.
+  partNumber      String   @unique
+
+  /// Every other code we've seen for this part. Includes the legacy
+  /// 7-digit form (mined from sku_legacy_modern_map.json) plus any
+  /// retailer cross-references and source variants.
+  aliases         String[] @default([])
+
+  /// Canonical part name. Sourced from the first non-null name across
+  /// all BOM appearances of this part.
+  name            String
+
+  /// "PC", "KG", "M", etc. Null when the source doesn't specify.
+  unitOfMeasure   String?
+
+  /// True if ANY source marked this part as a recommended-spare.
+  isRecommended   Boolean  @default(false)
+
+  /// Sources that have data for this part (EPARTS_API, PDF, LSENGINEERS,
+  /// etc.) — for ranking + diagnostics.
+  sources         OemCatalogSource[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  lines           PartLine[]
+  listings        PartListing[]
+  prices          PartPriceSnapshot[]
+  compats         PartCompatibility[]
+
+  @@index([aliases], type: Gin)
+  @@index([name])
+}
+
+/// BOM line — junction between Diagram (assembly) and Part. Narrow:
+/// no part metadata duplicated here, only the appearance-specific fields.
+model PartLine {
+  diagramId       String
+  partId          String
+
+  /// Callout number on the diagram (e.g. "1", "3", "6a"). Pairs with the
+  /// id field inside the parent Diagram's hotspotsJson.
+  callout         String   @default("")
+
+  qty             Int?
+  notes           String?
+
+  /// Set when the source flagged this line as a recommended spare.
+  /// (Only the older alfis-format PDFs and some sources convey this.)
+  isRecommended   Boolean  @default(false)
+
+  diagram         Diagram  @relation(fields: [diagramId], references: [id], onDelete: Cascade)
+  part            Part     @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@id([diagramId, partId, callout])
+  @@index([partId])
+  @@index([diagramId])
+}
+
+// ─── External-source enrichment ───────────────────────────────────────────────
+
+/// Rich per-SKU data sourced from external retailers that publish more than
+/// just SKU + price. Currently: Neyer (~45K Wacker products with description,
+/// HD images, replaces[], weight, etc.) and LS Engineers (~21K BOM-derived
+/// SKUs with title, price, lead time).
+///
+/// Each Part can have multiple listings — one per source. Optional Machine
+/// link when the listing was discovered in a model-specific context (LS
+/// Engineers always provides this; Neyer rarely does).
+model PartListing {
+  id            String        @id @default(cuid())
+  partId        String
+  source        ListingSource
+
+  /// SKU as the source publishes it (may equal partNumber or be a wrapper).
+  externalSku   String
+  externalUrl   String
+
+  title         String?
+  description   String?
+  imageUrls     Json?          // string[]
+  priceText     String?
+  priceAmount   String?        // decimal as string to avoid rounding
+  currency      String?        @default("USD")
+  leadTime      String?
+
+  /// "Replaces" cross-references the source publishes — populated into
+  /// the Part.aliases array during ingest, kept here for traceability.
+  replacesOem   String[]       @default([])
+
+  /// When the listing was discovered in a model-specific context.
+  machineId     String?
+
+  scrapedAt     DateTime       @default(now())
+
+  part          Part           @relation(fields: [partId], references: [id], onDelete: Cascade)
+  machine       Machine?       @relation(fields: [machineId], references: [id], onDelete: SetNull)
+
+  @@unique([source, externalSku])
+  @@index([partId])
+  @@index([machineId])
+}
+
+/// Fitment / compatibility: which Machines does a Part fit?  Sourced from
+/// DHS Compatibility & Fitment tables, LS Engineers `fits_models`, and
+/// implicitly from eParts BOM rows.
+///
+/// Note: NOT a hard FK to Machine (only to Part) because compatibility data
+/// often references model NAMES that don't exactly match a Machine.modelName
+/// — we keep the modelName text for fuzzy matching at read time.
+model PartCompatibility {
+  id              String       @id @default(cuid())
+  partId          String
+
+  /// Canonical model token (lowercased, separator-stripped) — same shape
+  /// as Machine.modelName so joins are clean.
+  modelName       String
+
+  /// Optional more-specific machine link (when source published a serial
+  /// or SAP code). Nullable + ON DELETE SET NULL so unmatched data survives.
+  machineId       String?
+
+  source          CompatSource
+
+  scrapedAt       DateTime     @default(now())
+
+  part            Part         @relation(fields: [partId], references: [id], onDelete: Cascade)
+  machine         Machine?     @relation(fields: [machineId], references: [id], onDelete: SetNull)
+
+  @@unique([partId, modelName, source])
+  @@index([partId])
+  @@index([modelName])
+  @@index([machineId])
+}
+
+/// Retailer pricing snapshots (admin-only, not exposed to the storefront).
+/// Captured by the scraper pipeline (hydrotech / dhs-klevu / russopower /
+/// danseusa / tmsequip / contractorsdirect / lsengineers).
+///
+/// `partNumber` is text, NOT a FK to Part — retailers carry SKUs we
+/// haven't yet ingested. After enough scrapes the partId can be backfilled.
+model PartPriceSnapshot {
+  id             String   @id @default(cuid())
+  partNumber     String
+  partId         String?  // backfilled when the SKU is recognised
+
+  retailer       String
+  currency       String   @default("USD")
+  price          String?  // text to avoid rounding; admin tools cast to Decimal
+  productName    String?
+  productUrl     String?
+  imageUrl       String?
+  isCallForPrice Boolean  @default(false)
+
+  scrapedAt      DateTime @default(now())
+
+  part           Part?    @relation(fields: [partId], references: [id], onDelete: SetNull)
+
+  @@index([partNumber])
+  @@index([partId])
+  @@index([retailer, scrapedAt])
+}

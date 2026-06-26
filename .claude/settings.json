@@ -10,6 +10,14 @@
       "Bash(prisma *)",
       "PowerShell(*)",
 
+	"Read(*)",
+	"Edit(C:\\Users\\Ventura AI\\Documents\\industriparts\\**)",
+	"Write(C:\\Users\\Ventura AI\\Documents\\industriparts\\**)",
+	"Bash(bash *)",
+	"Bash(python *)",
+	"mcp__supabase__*",
+	"mcp__supabase-dev__*", 
+
       "mcp__Claude_in_Chrome__browser_batch",
       "mcp__Claude_in_Chrome__navigate",
       "mcp__Claude_in_Chrome__read_page",

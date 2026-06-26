@@ -1,7 +1,7 @@
 /**
  * Seed PartPriceSnapshot rows from the seven retailer scrape CSVs.
  *
- * Reads `WN manuals an files/wn_*.csv` and writes one row per CSV row
+ * Reads `data/wn_*.csv` and writes one row per CSV row
  * into PartPriceSnapshot — keyed only by partNumber + retailer (no FK
  * to OemPart because the retailer catalogs carry many SKUs that aren't
  * in the OEM catalog).
@@ -23,7 +23,7 @@ import { createInterface } from "node:readline";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Prisma } from "../src/app/generated/prisma/client";
 
-const ROOT = resolve(process.cwd(), "WN manuals an files");
+const ROOT = resolve(process.cwd(), "data");
 
 /** Seven scrape CSVs → (file, retailerTag).
  *  The tags are short, stable identifiers used in PartPriceSnapshot.retailer.

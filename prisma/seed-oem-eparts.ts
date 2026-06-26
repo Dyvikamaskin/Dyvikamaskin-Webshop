@@ -1,7 +1,7 @@
 /**
  * Seed the OEM parts catalog from shop.wackerneuson.com eParts JSON dumps.
  *
- * Reads every `WN manuals an files/eparts/*.json` produced by
+ * Reads every `data/eparts/*.json` produced by
  * `enumerate_wn_eparts_full.py` and writes:
  *
  *   OemMachine          (source=EPARTS_API)
@@ -10,7 +10,7 @@
  *                        with subRevisionName set for sub-rev rows)
  *   OemPart             (the parts list under each component)
  *
- * The .hd3 hotspot JSON is read from the local `WN manuals an files/eparts_assets/`
+ * The .hd3 hotspot JSON is read from the local `data/eparts_assets/`
  * directory (downloaded by `download_eparts_assets.py`) and inlined onto
  * OemComponent.hotspotsJson — gives the storefront the click-coordinate
  * data without a re-fetch.
@@ -27,7 +27,7 @@ import { join, resolve } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, OemCatalogSource, Prisma } from "../src/app/generated/prisma/client";
 
-const ROOT = resolve(process.cwd(), "WN manuals an files");
+const ROOT = resolve(process.cwd(), "data");
 const EPARTS_DIR = join(ROOT, "eparts");
 const ASSETS_DIR = join(ROOT, "eparts_assets");
 

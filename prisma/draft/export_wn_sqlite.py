@@ -5,7 +5,7 @@ better-sqlite3 dependency.
 
 Usage:
   python prisma/draft/export_wn_sqlite.py \\
-      --db "../WN manuals an files/wn_parts.sqlite" \\
+      --db "../data/wn_parts.sqlite" \\
       --out prisma/draft/wn_parts_export.json
 
 Output shape:

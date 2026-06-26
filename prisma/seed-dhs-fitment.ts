@@ -1,7 +1,7 @@
 /**
  * Seed OemPartCompatibility rows from the DHS fitment scrape JSONL.
  *
- * Reads `WN manuals an files/dhs_fitment.jsonl` (one product per line,
+ * Reads `data/dhs_fitment.jsonl` (one product per line,
  * produced by `scrape_dhs_fitment.py`). Each line carries a `fitment[]`
  * array of {name, model, machine_numbers[]} rows that we explode into
  * one OemPartCompatibility row per (sku, model) pair.
@@ -12,7 +12,7 @@
  *   npx tsx prisma/seed-dhs-fitment.ts
  *
  * Options via env:
- *   DHS_JSONL=path/to/file.jsonl  (default: WN manuals an files/dhs_fitment.jsonl)
+ *   DHS_JSONL=path/to/file.jsonl  (default: data/dhs_fitment.jsonl)
  *   DHS_SOURCE=dhs                (default; matches the source tag we use elsewhere)
  */
 import "dotenv/config";
@@ -24,7 +24,7 @@ import { PrismaClient } from "../src/app/generated/prisma/client";
 
 const JSONL = resolve(
   process.cwd(),
-  process.env.DHS_JSONL ?? "WN manuals an files/dhs_fitment.jsonl",
+  process.env.DHS_JSONL ?? "data/dhs_fitment.jsonl",
 );
 const SOURCE = process.env.DHS_SOURCE ?? "dhs";
 const BATCH = 50;

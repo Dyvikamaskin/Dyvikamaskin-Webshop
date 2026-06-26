@@ -1,34 +1,285 @@
 # Session handoff — IndustriParts v4.1 work
 
-**As of 23 June 2026 (end of session).**
-Phases 0–9 live in production. v4.2 storefront redesign still queued
-unchanged. This session went sideways into v4.3 data plumbing: a full
-OEM parts-catalog ingest pipeline on a **separate branch
-`phase-oem-catalog` — production is untouched**. See "23 June session"
-section below.
+**As of 26 June 2026 (end of session).**
+
+> **The OEM-parts catalog is now its own sub-project** — separate Supabase
+> project (`rtzcrngduscrhgozrojv` under BojoIndAI1 org), separate Prisma
+> schema (`prisma/oem/`), separate Prisma client (`src/lib/oem-db.ts`).
+>
+> **For ALL OEM-catalog work — Tier 1 (eParts) / Tier 2 (LS Engineers) /
+> Tier 3 (Neyer + DHS) — the canonical plan is
+> [`docs/oem/PLAN.md`](oem/PLAN.md).** Read that file for OEM phase
+> status, next steps, and follow-up backlog. The 25-26 June sections
+> below are historical context — superseded by the plan doc.
+
+Phases 0–9 of the Dyvika storefront live in production. v4.2 storefront
+redesign still queued unchanged. OEM catalog BOM walk is **in progress**
+(see § below).
+
+## End-of-session state (26 June) — BOM walk running + DB cleanup complete
+
+### BOM walk in progress
+
+`scripts/oem-ingest/eparts/03-bom-walk.ts` is running as a background process,
+walking eParts component API for all 4,412 canonical machines in
+`data/eparts_v2/_sidebar_4412.json`. Progress is checkpointed to
+`data/eparts_v2/_bom_walk_progress.json`. **It writes directly to local
+PostgreSQL** (`oem_catalog` DB on localhost:5432) — not to Supabase.
+
+Status when session ended: **~1,105 / 4,412 machines done, ~70 errors (frozen),
+~14 hours remaining**. The script is idempotent — skips codes already in
+`done[]` — so it can be killed and restarted safely.
+
+Key BOM walk architecture decisions:
+- **5xxx machine codes** use `products/{code}` → revisions → devices → component endpoint
+- **1xxx machine codes** (big equipment) use `nonRevMachine/{code}` → sparepartsBookList
+  (PDF only — no interactive BOM available from eParts for these)
+- Approx. **4,000 machines** will yield interactive BOMs; the rest are PDF-only
+- **Service Kit / Maintenance Kit** part numbers do NOT appear in eParts BOMs — that data
+  will come from Parts Manual PDFs in a later phase
+- P2002 race conditions (5 concurrent workers) are handled with try/catch → findUnique fallback
+
+After the walk: the local DB will hold the full tier-1 BOM dataset, ready for a
+curated push to Supabase OEM.
+
+### Database state after this session
+
+| DB | Size | State |
+|---|---|---|
+| **Local PostgreSQL** (`oem_catalog`) | ~growing | PRIMARY OEM store — all data (eParts BOM + transferred data) lives here |
+| **Supabase OEM** (`rtzcrngduscrhgozrojv`) | ~11 MB | Schema intact, data **truncated** — all rows transferred to local first, then cleared. Ready for final curated push after BOM walk. |
+| **Supabase main app** (`nxqqmplptalbxmfmbtfs`) | ~13 MB | OEM tables **dropped** this session (freed ~695 MB). Only storefront schema remains. |
+
+### What was done this session (infra cleanup)
+
+| Area | Outcome |
+|---|---|
+| **Three-DB architecture documented** | `CLAUDE.md` now has full DB architecture section: two Supabase accounts, three targets, Prisma configs, env vars, npm scripts, MCP tools |
+| **npm scripts** | Added `oem:generate` / `oem:push` / `oem:migrate` / `oem:studio` to `package.json` alongside existing `db:*` scripts |
+| **`.env` / `.env.local` pattern** | `.env` = Supabase defaults. `.env.local` (gitignored) = local PostgreSQL override. Scripts use two-step dotenv load. |
+| **`supabase-oem` MCP added to Claude Desktop** | `~\AppData\Roaming\Claude\claude_desktop_config.json` — stdio server via `npx @supabase/mcp-server-supabase@latest --access-token sbp_02058757...` (BojoIndAI1 PAT). Use `mcp__supabase-oem__execute_sql` in Claude Desktop sessions. |
+| **`~/.claude/mcp.json`** | Updated PAT to BojoIndAI1 account token (HTTP MCP for Claude Code CLI sessions) |
+| **Transfer script** | `scripts/oem-ingest/04-transfer-from-supabase.ts` — 4-pass idempotent transfer from Supabase OEM → local PG (PDF Machines, PartPriceSnapshot, PartCompatibility, PartListing). FK remapping via natural keys. |
+| **Main app DB cleaned** | Dropped all OEM-prefixed tables + PartPriceSnapshot from `nxqqmplptalbxmfmbtfs`. Main app is now clean storefront-only. |
+| **Supabase OEM truncated** | All non-eParts rows transferred to local, then TRUNCATE CASCADE on all OEM tables. Schema intact. |
+| **BOM walk script fixed** | `03-bom-walk.ts`: Prisma 7 adapter pattern, P2002 fallback, correct relative import path, `diagramData` object extraction (`.filename` / `.id`), `mode: "NUMERIC"` required field |
+
+### Next steps after BOM walk completes
+
+1. **Check walk stats** — `data/eparts_v2/_bom_walk_progress.json` has `done[]`, `errors[]`, counts
+2. **Phase 1.4-recon** — the local DB still has OEM DB rows from the old 5,002-machine set (over-permissive). After walk, reconcile against the canonical 3,427 sidebar set from `_catalog_v3.json`
+3. **Push curated data to Supabase OEM** — once local DB is clean, migrate to the Supabase project for production use
+4. **PDF kit extraction** — service kits / maintenance kits don't appear in eParts BOM; extract from Parts Manual PDFs
+5. **Phase 2: LS Engineers** — BOM fill for big-equipment where eParts has no interactive BOM
+6. **Phase 3: Neyer + DHS enrichment** — re-run with larger Part catalog
+
+## Mid-session (26 June) — supabase-oem MCP + BOM analysis
+
+### New MCP server added
+
+`~/.claude/mcp.json` created with a `supabase-oem` entry authenticated via BojoIndAI1 PAT. This gives Claude Code direct SQL
+access to OEM project `rtzcrngduscrhgozrojv`. **Requires Claude Code restart to activate**
+— on first startup after restart, approve the `supabase-oem` server when prompted.
+
+Once live, query OEM DB like this (use the `supabase-oem` MCP tool, project id `rtzcrngduscrhgozrojv`):
+```sql
+SELECT COUNT(*) FROM "Machine";
+SELECT COUNT(DISTINCT "machineId") FROM "Diagram";
+```
+
+### BOM coverage analysis in progress
+
+We were mid-query establishing how many of the 3,427 canonical machines actually have
+BOM data in the OEM DB. The per-machine JSON files in `data/eparts_v2/` only hold
+catalog metadata — actual BOM (Diagram/PartLine rows) lives in the OEM DB.
+
+**Known from OEM DB ETL (25 June):** the ETL migrated data from the OLD 572-machine walk:
+- 1,046 Machines, 3,542 Revisions, 83,223 Diagrams, 34,774 Parts, 1,327,284 PartLines
+
+**Question to answer after restart:** how many of the 3,427 canonical machines have
+Diagram rows in the OEM DB right now? Run:
+```sql
+SELECT
+  COUNT(DISTINCT m.id) AS total_machines,
+  COUNT(DISTINCT d."machineId") AS machines_with_diagrams,
+  COUNT(DISTINCT m.id) - COUNT(DISTINCT d."machineId") AS machines_no_diagrams,
+  COUNT(d.id) AS total_diagrams
+FROM "Machine" m
+LEFT JOIN "Diagram" d ON d."machineId" = m.id;
+```
+
+### Category breakdown confirmed
+
+Old 572-machine walk vs canonical 3,427 — the delta is almost entirely small-equipment:
+
+| Category | 572 walk | 3,427 walk | Delta |
+|---|---:|---:|---:|
+| Compaction | 93 | 1,081 | +988 |
+| Concrete Technology | 163 | 655 | +492 |
+| Power Supply | 64 | 490 | +426 |
+| Pumps | 40 | 342 | +302 |
+| Demolition | 50 | 249 | +199 |
+| Lighting | 20 | 203 | +183 |
+| Heating | 46 | 180 | +134 |
+| Dumpers | 12 | 49 | +37 |
+| Wheel Loaders | 17 | 52 | +35 |
+| Excavators | 24 | 58 | +34 |
+| Telehandlers | 5 | 32 | +27 |
+| Skid Steer Loaders | 27 | 36 | +9 |
+| Attachments | 11 | 3 | -8 |
+
+The 572-machine walk captured most big-equipment (Excavators/Telehandlers) but missed
+massive swaths of small-equipment variants.
+
+---
 
 Next up — pick one:
 - **v4.2 storefront redesign** — three PRs in
   `docs/v4.2-redesign-plan.md`, decisions locked, unchanged from
   11 May. ~7 h.
-- **v4.3 OEM catalog seed run** — schema + migration + three seeds
-  all committed at `80a33e4`. ~30 min once a Supabase project is
-  awake (both projects were paused / timing out at end of session).
+- **OEM Parts — Phase 1.4-reconcile FIRST**, then Phase 1.5. The OEM DB
+  currently has 5,002 Machine rows from the over-permissive
+  `sapMaterialType:Machine` facet walk; the **canonical sidebar set is
+  3,427** machines per the 26 June recon. Phase 1.4 needs to be redone
+  (or delta-reconciled) against `data/eparts_v2/_catalog_v3.json`
+  before BOM walking starts. See [`docs/oem/PLAN.md`](oem/PLAN.md)
+  §Phase 1.4-recon (new step).
 
 ## Quickstart for a new owner
 
-1. **Read this file top to bottom.** Then:
-2. [`v4.2-redesign-plan.md`](v4.2-redesign-plan.md) — the queued
+1. **Read this file top to bottom** for project-wide context. Then:
+2. [`oem/PLAN.md`](oem/PLAN.md) — **canonical OEM Parts plan**; read
+   if any OEM-catalog work is on the agenda.
+3. [`oem/README.md`](oem/README.md) — OEM sub-project entry point;
+   data-sources, ETL runbook, post-ETL drop runbook all linked from
+   here.
+4. [`v4.2-redesign-plan.md`](v4.2-redesign-plan.md) — the queued
    redesign work, decisions, file-by-file plan, time estimates.
-3. [`v4.1-implementation-plan.md`](v4.1-implementation-plan.md) —
+5. [`v4.1-implementation-plan.md`](v4.1-implementation-plan.md) —
    the upstream master plan (phases 0-9).
-4. [`route-stub-registry.md`](route-stub-registry.md) — known route
+6. [`route-stub-registry.md`](route-stub-registry.md) — known route
    stubs (`/kampanjer`, `/info/finn-lager`).
 
 Codebase is on `main` at `dc9c4cf` — production Railway tracks it and
-is live. Branch `phase-oem-catalog` (this session, 23 June) is committed
-at `80a33e4` but **not merged**; nothing has been pushed to production
-since 11 May.
+is live. Branch `phase-oem-catalog` (23 June) is committed at `80a33e4`
+but **not merged**; nothing has been pushed to production since 11 May.
+
+## 26 June session — Canonical eParts machine list discovered
+
+**Headline:** the 25 June Phase 1.4 catalog sync used the OVER-PERMISSIVE
+`sapMaterialType:Machine` global facet (4,338 entries). That included
+~900 RENTAL FLEET / regional / non-public variants that don't appear in
+the eParts sidebar. The **canonical sidebar set is 3,427 machines** —
+discovered by walking each leaf category with
+`products/search?:category:LEAF_ID:sapMaterialType:Machine`.
+
+User trigger: noticed that the OEM DB had **28 M2500 entries** including
+e.g. `M2500-SM7S-H65 RENTAL FLEET_5100027158`, while the eParts sidebar
+shows only **3 actual M2500 machines** (5100010890, 5100006000,
+5100009717 — `Concrete Technology > Internal Vibrators > Modular
+Internal Vibrators`).
+
+### What was tried, what works
+
+| Endpoint / facet | Count | Verdict |
+|---|---|---|
+| `/navigation/categories/{id}.products[]` (old walk) | 572 | UNDER-permissive — misses EZ excavators, ET, 803, TH telehandlers entirely. Curated set only. |
+| `/products/search?:name-asc:sapMaterialType:Machine` (25 June Phase 1.4 walk) | 4,338 | OVER-permissive — includes RENTAL FLEET, regional configs, parts mis-tagged as Machine. |
+| `/products/search?:category:LEAF:sapMaterialType:Machine` per leaf, union | **3,427** | **✅ canonical** — matches sidebar. RENTAL FLEET variants are tagged Machine but NOT assigned to any category, so they drop out automatically when category is filtered. |
+
+### Bootstrap-endpoint search came up empty
+
+Probed 16 candidate paths for a single-call "give me the whole sidebar"
+endpoint (`/navigation/tree`, `/menu`, `/sidebar`, `/all-machines`, etc.)
+— all 404. The `/eparts/` page itself is a 3.6 KB SPA shell with no
+embedded data. So the SPA does what we now do: walks every leaf with
+`products/search?:category:LEAF`. There is no shortcut.
+
+### Outputs landed today
+
+| File | What |
+|---|---|
+| `data/eparts_v2/_categories_walk.json` | Full category tree (146 nodes, 106 leaves, paths preserved) |
+| `data/eparts_v2/_catalog_v3.json` | **3,427 distinct machines + category paths** — canonical input for Phase 1.4-recon |
+| `data/recon_eparts_categories.py` | Tree walker |
+| `data/walk_eparts_canonical_v3.py` | Leaf × Machine facet walker |
+
+### What still needs to happen
+
+The current OEM DB (`rtzcrngduscrhgozrojv`):
+- 5,002 Machine rows total
+  - 4,338 from the over-permissive Phase 1.4 walk (includes ~911 rental/regional pollution)
+  - 664 PDF-source from older ETL (no displayName / modelName)
+- Canonical target: 3,427 — full category paths attached
+
+**Decision needed:** reconcile delta (faster, ~30 min) OR re-do Phase
+1.4 cleanly from `_catalog_v3.json` (cleaner, ~1 h). See
+[`docs/oem/PLAN.md`](oem/PLAN.md) §Phase 1.4-recon for the two options.
+**This must complete before Phase 1.5 (BOM walk) starts** — we don't
+want to walk BOMs for the ~911 non-canonical machines.
+
+## 25 June session — OEM Parts split into its own sub-project
+
+Headline: **OEM-catalog data is no longer in Dyvika prod's database.** It
+lives in a new Supabase project (`rtzcrngduscrhgozrojv` under the
+BojoIndAI1 org) on its own schema. Dyvika prod's 500 MB free-tier ceiling
+no longer constrains the OEM data growth.
+
+Why: prod hit **806 MB on the 500 MB free quota** and went into read-only
+mode mid-session, killing the DHS fitment seed at 62%. Pro upgrade was an
+option ($25/mo); we chose Path 2 (separate free-tier project under a new
+org) to keep Dyvika prod free-tier and isolate the OEM data growth from
+the storefront DB.
+
+### What landed today
+
+| Area | Outcome |
+|---|---|
+| New OEM Supabase project | `rtzcrngduscrhgozrojv` (BojoIndAI1's Org, free tier, eu-west-3 Paris) created + connection strings wired into `.env` as `OEM_DATABASE_URL` / `OEM_DIRECT_URL` |
+| Lean Prisma schema | `prisma/oem/schema.prisma` + `prisma/oem/prisma.config.ts` — normalized Part/PartLine/Machine/Revision/Diagram/Listing/Compat/PriceSnapshot. DDL applied to new DB via direct `prisma migrate diff` + node-pg execute (Prisma CLI was misbehaving with the new config). |
+| Prisma client | `src/app/generated/oem-prisma/` + singleton at `src/lib/oem-db.ts` |
+| ETL from prod | 8-phase migration (`scripts/oem-etl/phase-1..8.ts` + `verify.ts`) moved tier-1 (eParts) data: **1,046 Machine, 3,542 MachineRevision, 83,223 Diagram, 34,774 Part (deduped from 1.38M OemPart via legacy↔modern map), 1,327,284 PartLine, 291,611 PartCompatibility, 5,061 PartListing, 200,386 PartPriceSnapshot.** Tier-2 (LS Engineers) and tier-3 (Neyer/DHS enrichment) deliberately NOT ingested — sequence per [PLAN.md](oem/PLAN.md). |
+| eParts re-enumeration | `data/eparts_v2/` — 4,338 machines discovered via `sapMaterialType:Machine` facet (vs prior 572). Each machine enriched with per-revision `hasBomTree`, partsManuals[], operatingManuals[]. |
+| **Phase 1.4 catalog sync ran** | `scripts/oem-ingest/eparts/01-catalog-sync.ts` upserted eparts_v2 → OEM DB. **OEM DB now holds 5,002 Machines (+3,956) and 20,784 MachineRevisions (+17,242).** 690 dropdown entries skipped as accessory/sibling-nav for Phase 1.4b. 664 PDF-source Machines from older ETL have NULL displayName — backfill in Phase 1.4c. |
+| Sibling-machine pattern discovered | TH-series and similar big-equipment machines list **sibling models in the dropdown** (TH627's dropdown shows TH625/TH408/TH522/TH744 etc). NOT accessories — they're nav shortcuts. Phase 1.4b distinguishes via sparePartListCode lookup against existing Machine rows. |
+| Excel export | `scripts/oem-utils/export-machines-xlsx.py` produces `data/exports/oem-machines.xlsx` (3.2 MB, two sheets) for human review of Machine + MachineRevision data. |
+| PDF coverage audit | 18,658 parts manuals advertised by eParts; **1,491 on disk (8%); 17,167 missing (~83 GB).** Operating manuals: 9,114 advertised, 0 on disk (~99 GB). |
+| Folder reorg | `WN manuals an files/` → `data/`; OEM docs moved into `docs/oem/`; 15 file references updated |
+| Master plan | [`docs/oem/PLAN.md`](oem/PLAN.md) — 10 phases, ~80 steps, with status legend |
+
+### Open follow-ups all rolled into the OEM PLAN
+
+Every OEM-related TODO from the 23-24 June sessions has been migrated
+into [`docs/oem/PLAN.md`](oem/PLAN.md) with a specific phase reference.
+The PLAN.md "Open follow-ups inherited from earlier sessions" section
+maps each old TODO to its new phase. **Don't add new OEM TODOs here —
+edit PLAN.md.**
+
+### Database state after today
+
+| | Dyvika prod (`nxqqmplptalbxmfmbtfs`) | OEM (`rtzcrngduscrhgozrojv`) |
+|---|---|---|
+| Tier / org | Free / Dyvikamaskin | Free / BojoIndAI1 |
+| Size today | ~806 MB (READ-ONLY due to disk full) | ~250 MB |
+| Tables | All Dyvika storefront + **still has Oem\* tables** (haven't dropped yet — Phase 7 in PLAN.md) | All new lean-schema tables, populated tier-1 |
+| Next op | DROP the Oem\* tables when Phase 1+3 of OEM PLAN are done → frees ~700 MB → back under quota | Continue ingest per PLAN.md Phase 1 |
+
+### Decisions resolved this session
+
+- **OEM-catalog architecture: Path 2** (separate Supabase project, no
+  HTTP layer, direct cross-DB Prisma reads).
+- **Data tier order: strict 1 → 2 → 3.** Don't ingest tier 2 until tier
+  1 is complete; don't create stub Parts until tier 1+2 are done and we
+  know the residual gap.
+- **OEM client integration:** second Prisma client in same codebase
+  (`src/lib/oem-db.ts`), NOT a separate API service.
+- **Files:** sub-project layout inside the main repo, NOT a separate
+  Git repo. Promote later if needed (e.g. licensing the catalog to other
+  dealers).
+- **Operating manuals (~99 GB):** keep URLs only, fetch on demand. Don't
+  download full bulk.
+- **Stub Parts for orphan SKUs:** deferred to end of Phase 3, after tier
+  1+2 reveal the true residual gap.
 
 ## 23 June session — v4.3 OEM-catalog data plumbing
 
@@ -43,14 +294,14 @@ DB untouched.
 |---|---|
 | `prisma/schema.prisma` (+158 lines) | New enum `OemCatalogSource` + five models: `OemMachine`, `OemMachineRevision`, `OemComponent`, `OemPart`, `PartPriceSnapshot`. Plus `MachineMake.oemMachines[]` back-relation. |
 | `prisma/migrations/20260623100000_phase_oem_catalog/migration.sql` | Five `CREATE TABLE`, one `CREATE TYPE`, 14 indexes, 4 FKs. Not yet applied. |
-| `prisma/seed-oem-eparts.ts` | Reads `WN manuals an files/eparts/*.json` (572 files, 376 with data) + inlines `.hd3` click-coord JSON from `eparts_assets/`. Writes `OemMachine`/`Revision`/`Component`/`Part` with source=`EPARTS_API`. Idempotent on `(code, source)`. |
+| `prisma/seed-oem-eparts.ts` | Reads `data/eparts/*.json` (572 files, 376 with data) + inlines `.hd3` click-coord JSON from `eparts_assets/`. Writes `OemMachine`/`Revision`/`Component`/`Part` with source=`EPARTS_API`. Idempotent on `(code, source)`. |
 | `prisma/seed-oem-pdfs.ts` | Reads `prisma/draft/wn_parts_export.json` (regenerated from `wn_parts.sqlite`). Writes the same tables with source=`PDF` — separate rows because PDF and eParts SKU sets are only ~34% overlapping. |
 | `prisma/seed-part-prices.ts` | Reads the seven retailer CSVs → `PartPriceSnapshot`. Admin-only competitive pricing snapshot table; **not exposed to the storefront**. |
 | `prisma/draft/export_wn_sqlite.py` | One-line Python that converts `wn_parts.sqlite` → `wn_parts_export.json` for the PDF seed. |
 
 Schema validate ✓, generate ✓, `npm run typecheck` ✓ on the branch.
 
-### What's in `WN manuals an files/` (this session's working data)
+### What's in `data/` (this session's working data)
 
 Outside the repo (gitignored / untracked). Headlines:
 
@@ -71,7 +322,7 @@ Outside the repo (gitignored / untracked). Headlines:
   SKUs**: hydrotech 25k, danseusa 17k, tmsequip 10k (ConvertCart cap),
   russopower 1.2k, dhs-brand 600, contractorsdir 170, **dhs-klevu
   145,901**. The Klevu API alone hit 144k uniques.
-- **`Handover-WN-data.md`** — the working-data handoff. The "Next steps"
+- **`data-handover.md`** — the working-data handoff. The "Next steps"
   section there has been migrated into "Open follow-ups → v4.3 OEM
   catalog" below — that's the canonical list now.
 
@@ -175,9 +426,9 @@ gap eParts can't fill; and the eParts catalog has many more machines than our
 
 | Commit | What |
 |---|---|
-| `5f132fe` | `.gitignore` for `WN manuals an files/` data + `CLAUDE.md` collaboration rules |
-| `9216b0d` | 30 Python scripts under `WN manuals an files/` (analysis + scrapers + seeds) |
-| `780a5bb` | `docs/oem-data-sources.md` knowledge base + `Handover-WN-data.md` + 4 auto-reports |
+| `5f132fe` | `.gitignore` for `data/` data + `CLAUDE.md` collaboration rules |
+| `9216b0d` | 30 Python scripts under `data/` (analysis + scrapers + seeds) |
+| `780a5bb` | `docs/oem/data-sources.md` knowledge base + `data-handover.md` + 4 auto-reports |
 
 ### What's pending commit (today's late-session work)
 
@@ -188,8 +439,8 @@ gap eParts can't fill; and the eParts catalog has many more machines than our
   transaction timeout that killed the first Neyer seed
 - `prisma/seed-dhs-fitment.ts` — new seed for DHS Compatibility & Fitment data
 - `prisma/seed-lsengineers.ts` — new seed for LS Engineers listings + fitment
-- 10 new analysis scripts under `WN manuals an files/`
-- `docs/oem-data-sources.md` — updated with corrected taxonomy, LS Engineers retailer entry,
+- 10 new analysis scripts under `data/`
+- `docs/oem/data-sources.md` — updated with corrected taxonomy, LS Engineers retailer entry,
   3-environment / 13-layer architecture targets, dev-DB orphan note
 
 ### Pipeline runs that completed today
@@ -263,7 +514,7 @@ Migration `20260624200000_oem_compat_legacy_enums` applied to **prod
 
 Dev `iuimkzettrrqvvvgfvqp` is **paused + lives under a different Supabase account**
 (prod token can't see it). Migration **not applied to dev**. See
-[`oem-data-sources.md`](oem-data-sources.md) §9 for the dev-DB orphan question.
+[`oem/data-sources.md`](oem/data-sources.md) §9 for the dev-DB orphan question.
 
 ### Background jobs still running at session end
 
@@ -284,7 +535,7 @@ Dev `iuimkzettrrqvvvgfvqp` is **paused + lives under a different Supabase accoun
    model page — part-detail pages, assembly descriptions, JSON-LD blocks, hidden
    meta tags may have it. Tabled at end of session (interrupted by re-fetch
    cross-origin error).
-3. **Build the extended LS-only-machines seed.** Plan committed in `oem-data-sources.md`:
+3. **Build the extended LS-only-machines seed.** Plan committed in `oem/data-sources.md`:
    - For the **841 LS-only machines** → seed full `OemMachine/Revision/Component/Part`
      hierarchy with `source=LSENGINEERS`
    - For the **143 LS machines overlapping eParts** → don't duplicate BOM, just
@@ -296,7 +547,7 @@ Dev `iuimkzettrrqvvvgfvqp` is **paused + lives under a different Supabase accoun
 5. **Process the new Parts Manual PDFs through extractor** then re-seed OemPart
    (this is the second pass — first one is still running tonight).
 6. **Re-measure inventory coverage** after all the above lands. Target: ~75-80%.
-7. **Architecture target** (`docs/oem-data-sources.md` §9): set up real dev/staging
+7. **Architecture target** (`docs/oem/data-sources.md` §9): set up real dev/staging
    environments, CI/CD pipeline, RLS policies, Sentry. None of layers 4-13 of
    the production stack are in place yet.
 
@@ -306,7 +557,7 @@ Dev `iuimkzettrrqvvvgfvqp` is **paused + lives under a different Supabase accoun
 |---|---|
 | `5f132fe` | `.gitignore` + CLAUDE.md collaboration rules |
 | `9216b0d` | 30 Python scripts (analysis + scrapers) |
-| `780a5bb` | `docs/oem-data-sources.md` KB + Handover update + auto-reports |
+| `780a5bb` | `docs/oem/data-sources.md` KB + Handover update + auto-reports |
 | (next commit, end of 24 June) | schema migration + new seeds + late-session scripts + this handoff update |
 
 ## This session's deltas (skim before starting work)
@@ -371,12 +622,28 @@ Seven small follow-ons landed:
 Total estimated time: ~6 h 45 min. Each PR is independent — stop after
 any of them and ship.
 
-### v4.3 prep — OEM catalog (committed, awaiting DB)
+### OEM Parts — see [`docs/oem/PLAN.md`](oem/PLAN.md) (canonical)
 
-| Order | Branch | Scope | Reference |
-|---|---|---|---|
-| 4 | `phase-oem-catalog @ 80a33e4` | Apply migration to supabase-dev (or straight to prod — additive-only, 0 products at risk); run the three seeds; verify counts. **DB was paused at session end — wake it via dashboard first.** | "23 June session" above + `Handover-WN-data.md` |
-| 5 | (multiple branches) | Storefront features that consume the catalog. Full plan in [`v4.3-oem-catalog-plan.md`](v4.3-oem-catalog-plan.md) — four PRs: seed prod, render+upload diagrams, OEM-number search (chip `task_1b6fddc8`), interactive parts viewer (chip `task_ef6deb8e`). | `v4.3-oem-catalog-plan.md` |
+The OEM-catalog work is now its own sub-project under `prisma/oem/`,
+`scripts/oem-*`, `src/lib/oem-db.ts`, `data/`, `docs/oem/`. The full
+phase-by-phase plan with current status lives in **[`docs/oem/PLAN.md`](oem/PLAN.md)** —
+**read that file for any OEM-catalog work**, including:
+
+- Phase 1: complete tier-1 (eParts) BOM ingest for all 4,338 machines (current: 572 walked)
+- Phase 2: tier-2 (LS Engineers) BOM fill for big-equipment gaps
+- Phase 3: tier-3 (Neyer + DHS) enrichment + stub Parts
+- Phase 4: retailer pricing top-up (tmsequip past 10K, 8 backlog retailers)
+- Phase 5: Supabase Storage upload (diagrams + PDFs)
+- Phase 6: completeness (22 failed PDFs, sub-machine modelling, hand-verify)
+- Phase 7: drop OEM tables from Dyvika prod (frees ~700 MB)
+- Phase 8: storefront integration (`oemPrisma` callsites, search, viewer)
+- Phase 9: production hardening (RLS, FTS, backups, monitoring)
+- Phase 10: ongoing maintenance (re-walks, snapshot refresh)
+
+Do NOT add new OEM TODOs to this handoff file — edit PLAN.md directly.
+The legacy [`v4.3-oem-catalog-plan.md`](v4.3-oem-catalog-plan.md) is
+superseded by PLAN.md (kept for reference of the storefront-features
+plan).
 
 ## Earlier session's deltas (for context)
 
@@ -632,64 +899,13 @@ Real work items that didn't make it into the phase that introduced
 them. Loose-coupled — pick any in any order. Shipped follow-ups are
 listed in the next section for posterity.
 
-### v4.3 OEM catalog follow-ups (open)
+### OEM Parts follow-ups → see [`docs/oem/PLAN.md`](oem/PLAN.md)
 
-All of these were migrated from `WN manuals an files/Handover-WN-data.md`
-— that doc's "Next steps" section is now stale; this list is canonical.
-
-- **Run the three OEM seeds** (after migration applies). Order
-  independent. See "To finish the OEM-catalog ingest" above. The PDF
-  seed needs `prisma/draft/wn_parts_export.json` regenerated from the
-  current SQLite first.
-- **Render diagrams for the 348 newly-ingested PDF-derived manuals.**
-  `OemComponent.diagramImageFilename` already holds expected paths
-  like `drawings/<slug>_p<NN>.png`, but the files don't exist for the
-  new manuals — `WN manuals an files/drawings/` has only the 737 PNGs
-  from the original 17 models. Adapt `render_diagrams.py` to walk the
-  SQLite, fetch PDFs from `pdfs_shop/`, and render the missing pages
-  at 150 DPI. Probably 5,000–8,000 new PNGs (~1–2 GB). For the
-  eParts-API rows there's no rendering to do — the HD PNGs are already
-  in `eparts_assets/`. ~half day.
-- **Upload `eparts_assets/` (575 MB) to Supabase Storage.** Bucket
-  `oem-diagrams` (TBD). After upload, switch
-  `OemComponent.diagramImageFilename` to a storage key + add a
-  signed-URL endpoint. Same pattern as the Phase 4.5 `backups` bucket.
-  ~2 hours. The PDF-rendered PNGs (above) get the same treatment.
-- **Recover the 22 PDFs still failing extraction** (task chip
-  `task_53d35c2e`). RC100/RC110 rollers — giant 44 MB books — plus 3
-  empty extracts. Diagnosis already established that `classify_sp` is
-  fine for these; the bug is in `extract_sp`'s diagram→parts pair
-  detection. Two paths: extend the classifier OR PDF→OCR fallback.
-  ~30 min for path A; ~half day for path B.
-- **Scrape the 8 backlog retailers** (task chip `task_9a05f5fe`). Top
-  3 (`shop.equipmentshare.com`, `neyer.de`, `htsspares.com`) need no
-  new code — just CLI args on the generic Shopify scraper. The 3
-  bot-blocked (`gciron.com`, `harcoequipment.com`, `isprzet.pl`)
-  need Chrome MCP recon first. ~2-3 h for top 3, ~half day for the
-  bot-blocked.
-- **Re-run tmsequip beyond the 10K cap.** ConvertCart caps anonymous
-  offset traversal at 10,000; reported total is 66,678.
-  `aggregations.categories[]` from the API gives per-category counts
-  (~20-300 each, all under the cap). Iterate per category and union.
-  Small modification to `scrape_tmsequip_search.py`. ~1 hour.
-- **Hand-verify a sample.** Spot-check 10-20 part rows per category
-  against the source PDFs and against retailer listings, especially
-  for SP-format models (`isRecommended` is always 0 for those — sane?)
-  and the new compact-SP series. ~1 hour.
-- **Backfill the 222 catalogue-known machines that have no eParts
-  data** as `OemMachine` rows with no revisions. The `seed-oem-eparts.ts`
-  already inserts these (they're machines that the catalogue lists but
-  the products endpoint returns `revisions: []`), so this should
-  happen automatically. Verify after seed runs.
-- **First-class sub-machine modelling.** Today the engine inside a
-  machine is flattened onto the parent's revision via
-  `OemComponent.subRevisionName`. Cleaner would be a child
-  `OemMachine` row with `parentMachineCode` set + its own revision.
-  Schema already supports it (`parentMachineCode` column exists,
-  unused). Migration: low — the column is already there. ~half day.
-- **Decide whether `wn_parts_export.json` (24 MB) should be committed
-  or kept as a regenerable artifact.** Currently regenerable, not
-  committed. See `prisma/draft/export_wn_sqlite.py`.
+All OEM-catalog follow-ups (BOM walks, PDF recovery, retailer scrapes,
+storefront integration, etc.) have moved into the OEM master plan with
+specific phase references. The 25 June split-out section above
+summarises today's structural change; PLAN.md tracks all status going
+forward.
 
 ### Phase 4 follow-ups (open)
 

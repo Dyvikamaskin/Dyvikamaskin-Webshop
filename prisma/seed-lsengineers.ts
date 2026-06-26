@@ -3,11 +3,11 @@
  * driven scrape outputs.
  *
  * Inputs (relative to repo root):
- *   WN manuals an files/lsengineers_wacker_parts.csv      (sitemap-derived;
+ *   data/lsengineers_wacker_parts.csv      (sitemap-derived;
  *      one row per Wacker part URL with sku/name/model_hint — always present)
- *   WN manuals an files/lsengineers_assemblies.jsonl      (assembly walk;
+ *   data/lsengineers_assemblies.jsonl      (assembly walk;
  *      one row per assembly page with parts[] array containing GBP prices)
- *   WN manuals an files/lsengineers_parts.jsonl           (part-detail walk;
+ *   data/lsengineers_parts.jsonl           (part-detail walk;
  *      richer per-SKU data: fits_models[], replaces_oem[], description,
  *      image_urls[], price_amount)
  *
@@ -39,9 +39,9 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/app/generated/prisma/client";
 
 const REPO = process.cwd();
-const CSV = resolve(REPO, process.env.LS_CSV ?? "WN manuals an files/lsengineers_wacker_parts.csv");
-const ASSEMBLIES = resolve(REPO, process.env.LS_ASSEMBLIES_JSONL ?? "WN manuals an files/lsengineers_assemblies.jsonl");
-const PARTS = resolve(REPO, process.env.LS_PARTS_JSONL ?? "WN manuals an files/lsengineers_parts.jsonl");
+const CSV = resolve(REPO, process.env.LS_CSV ?? "data/lsengineers_wacker_parts.csv");
+const ASSEMBLIES = resolve(REPO, process.env.LS_ASSEMBLIES_JSONL ?? "data/lsengineers_assemblies.jsonl");
+const PARTS = resolve(REPO, process.env.LS_PARTS_JSONL ?? "data/lsengineers_parts.jsonl");
 
 const SOURCE_LISTING = process.env.LS_SOURCE_LISTING ?? "lsengineers-en";
 const SOURCE_COMPAT = process.env.LS_SOURCE_COMPAT ?? "lsengineers";

@@ -2,7 +2,7 @@
  * Seed the OEM parts catalog from extracted PDF parts books.
  *
  * Reads `prisma/draft/wn_parts_export.json` (produced by
- * `export_wn_sqlite.py` from `WN manuals an files/wn_parts.sqlite`)
+ * `export_wn_sqlite.py` from `data/wn_parts.sqlite`)
  * and writes:
  *
  *   OemMachine   (source=PDF, one per PDF manual)
@@ -19,7 +19,7 @@
  *
  *   1. Refresh the JSON export first:
  *        python prisma/draft/export_wn_sqlite.py \
- *          --db "WN manuals an files/wn_parts.sqlite" \
+ *          --db "data/wn_parts.sqlite" \
  *          --out prisma/draft/wn_parts_export.json
  *
  *   2. Run the seed:

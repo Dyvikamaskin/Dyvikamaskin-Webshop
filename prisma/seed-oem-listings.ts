@@ -1,7 +1,7 @@
 /**
  * Seed OemPartListing rows from the Neyer.de deep-crawl JSONL.
  *
- * Reads `WN manuals an files/wn_neyer_full.jsonl` (one product per line,
+ * Reads `data/wn_neyer_full.jsonl` (one product per line,
  * produced by `scrape_neyer_full.py`) and upserts rows keyed on
  * (partNumber, source='neyer-en').
  *
@@ -11,7 +11,7 @@
  *   npx tsx prisma/seed-oem-listings.ts
  *
  * Options via env:
- *   NEYER_JSONL=path/to/file.jsonl   (default: WN manuals an files/wn_neyer_full.jsonl)
+ *   NEYER_JSONL=path/to/file.jsonl   (default: data/wn_neyer_full.jsonl)
  *   NEYER_SOURCE=neyer-en            (default; change for other locales)
  */
 import "dotenv/config";
@@ -23,7 +23,7 @@ import { PrismaClient } from "../src/app/generated/prisma/client";
 
 const JSONL = resolve(
   process.cwd(),
-  process.env.NEYER_JSONL ?? "WN manuals an files/wn_neyer_full.jsonl",
+  process.env.NEYER_JSONL ?? "data/wn_neyer_full.jsonl",
 );
 const SOURCE = process.env.NEYER_SOURCE ?? "neyer-en";
 const BATCH = 50;
