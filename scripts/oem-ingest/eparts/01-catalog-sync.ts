@@ -157,9 +157,9 @@ async function main() {
       const res = await c.query<{ id: string; xmax: string }>(
         `INSERT INTO "Machine" (
            "id", "code", "source", "displayName", "modelName", "categoryPath",
-           "primaryImageUrl", "summary", "description", "isDiscontinued"
+           "primaryImageUrl", "summary", "description", "isDiscontinued", "createdAt", "updatedAt"
          )
-         VALUES ($1, $2, 'EPARTS_API'::"OemCatalogSource", $3, $4, $5::jsonb, $6, $7, $8, $9)
+         VALUES ($1, $2, 'EPARTS_API'::"OemCatalogSource", $3, $4, $5::jsonb, $6, $7, $8, $9, now(), now())
          ON CONFLICT ("code", "source") DO UPDATE SET
            "displayName" = EXCLUDED."displayName",
            "modelName" = EXCLUDED."modelName",
@@ -232,9 +232,9 @@ async function main() {
             `INSERT INTO "MachineRevision" (
                "id", "machineId", "revisionTag", "mode", "sparePartListCode",
                "hasBom", "rawName", "imageUrl", "partsManualUrl",
-               "partsManualFilename", "operatingManuals"
+               "partsManualFilename", "operatingManuals", "createdAt", "updatedAt"
              ) VALUES ($1, $2, $3, 'NUMERIC'::"RevisionMode", NULL,
-                       $4, $5, $6, $7, $8, $9::jsonb)
+                       $4, $5, $6, $7, $8, $9::jsonb, now(), now())
              ON CONFLICT ("machineId", "revisionTag") DO UPDATE SET
                "hasBom" = EXCLUDED."hasBom",
                "rawName" = COALESCE(EXCLUDED."rawName", "MachineRevision"."rawName"),
@@ -280,9 +280,9 @@ async function main() {
                "id", "machineId", "revisionTag", "mode", "sparePartListCode",
                "hasBom", "afCode", "aiCode", "serialFrom", "serialTo",
                "rawName", "imageUrl", "partsManualUrl",
-               "partsManualFilename", "operatingManuals"
+               "partsManualFilename", "operatingManuals", "createdAt", "updatedAt"
              ) VALUES ($1, $2, $3, 'SERIAL_RANGE'::"RevisionMode", $4,
-                       $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb)
+                       $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, now(), now())
              ON CONFLICT ("machineId", "revisionTag") DO UPDATE SET
                "sparePartListCode" = EXCLUDED."sparePartListCode",
                "hasBom" = EXCLUDED."hasBom",

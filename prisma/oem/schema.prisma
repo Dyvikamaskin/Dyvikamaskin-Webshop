@@ -164,6 +164,9 @@ model MachineRevision {
   /// "EZ38 (AF00894/AI00500 - ...) (WNCE0702NPAL00160 - ...)" string).
   rawName            String?
 
+  /// Which catalog source provided this revision's BOM data.
+  bomSource          OemCatalogSource?
+
   /// PDF and image artefacts associated with the revision.
   imageUrl           String?
   partsManualUrl    String?

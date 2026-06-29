@@ -1,6 +1,6 @@
 # OEM Parts Project — Master Plan
 
-**Last updated:** 2026-06-26
+**Last updated:** 2026-06-29
 
 > Sub-project of the IndustriParts main repo. OEM-catalog data (Machine,
 > Revision, Diagram, Part, PartLine, …) lives in its own Supabase project
@@ -110,7 +110,8 @@ extracted for the new ~3,300.
 | 1.7 | Download parts manual PDFs — **latest revision per machine only** | 🔴 | eParts publishes a fresh PDF per revision even when BOM is unchanged (99.8% of 18,661 published PDFs are revision-unique). For storefront we want the current-rev manual per machine: **~3,034 PDFs / ~17.5 GB.** Older revisions remain reachable via the eParts signed URL stored in `MachineRevision.partsManualUrl` — fetched on demand if a customer specifically requests a historical rev. New script `03-pdf-download.ts` writes to `data/eparts_pdfs/`. Optional: SHA-dedup after download (likely 30-50% saving on byte-identical adjacent-rev PDFs). |
 | 1.8 | Operating manuals: store URLs only, fetch on demand | ⏸ | 9,114 unique PDFs / ~99 GB if downloaded — exceeds Pro's 100 GB Storage budget on its own. Keep eParts signed URLs in `MachineRevision.operatingManuals` Json field, fetch on demand from the eParts media endpoint (URLs are durable). |
 | 1.9 | Backfill `Part.aliases` from `data/sku_legacy_modern_map.json` for new parts | 🔴 | Re-apply after BOM walk extends Part catalog |
-| 1.10 | Tier-1-coverage-report.md — which machines have full BOM, which still empty | 🔴 | One-off SQL query + summary write-up |
+| 1.10 | Tier-1-coverage-report.md — which machines have full BOM, which still empty | 🔴 | One-off SQL query + summary write-up. Also re-run `data/overlap_ls_vs_eparts.py` against the full DB (was run against old 572-machine set only). |
+| 1.11 | Add `partsHash` column to `Diagram` schema + post-walk dedup pass | 🔴 | **Dedup rule: two Diagram rows are identical iff their full parts list (sorted SKUs + callout numbers + quantities) matches — title and machine are irrelevant.** Compute SHA256 of sorted parts list, store in `Diagram.partsHash`. Merge duplicate Diagram rows: consolidate PartLine rows, update foreign keys. Run before Phase 2 so LS ingest can upsert by hash rather than create duplicates. This also powers the compatibility feature — "other machines using this part" = graph traversal through shared Diagram nodes. |
 
 **Expected after Phase 1:** 4,338 Machines, ~8K-10K Revisions, ~200K-400K
 Diagrams, ~80K-150K canonical Parts, 5-15M PartLines.
@@ -119,17 +120,23 @@ Diagrams, ~80K-150K canonical Parts, 5-15M PartLines.
 
 LS Engineers extracted **10,351 diagrams / 191,540 parts / 31,636
 distinct SKUs** with 100% field coverage (callouts, names, prices, lead
-times). Data on disk in `data/lsengineers/*.jsonl`. None in DB.
+times). Data on disk in `data/lsengineers_diagrams.jsonl`, `lsengineers_assemblies.jsonl`, `lsengineers_parts.jsonl` (in `data/` root, not a subdirectory). None in DB.
+
+**Dedup rule for ingest:** A diagram is identical to an existing one iff its full parts list (sorted SKUs + callout numbers + quantities) matches — title and machine category are irrelevant. Upsert by `partsHash` (see step 1.11). Same-named diagrams ("Air Cleaner Assembly", "Fuel Tank Assembly" etc.) appear across dozens of machine families but have completely different SKU sets — confirmed by inspection. Genuine duplicates do exist (e.g. two URL paths to same assembly) and should be merged, not double-inserted.
+
+Overlap analysis (`data/overlap_ls_vs_eparts.py`, run 2026-06-24 against old 572-machine set): 121 strong matches (Jaccard > 0.3, some at 1.00), 841 LS machine-ids with no eParts match — dominated by telehandlers (TH412, TH744, TH942) and excavators (ET90). Re-run after Phase 1 BOM walk completes for accurate gap picture.
 
 | | Step | Status | Notes |
 |---|---|---|---|
-| 2.1 | After Phase 1 done — list machines where eParts has no BOM | 🔴 | Likely ~100-200 machines (big-equipment EZ/ET/TH/803/etc) |
-| 2.2 | Match by `Machine.modelName` ↔ LS slug | 🔴 | Most LS models will have an eParts Machine entry; some 841 LS-only models won't |
-| 2.3 | Ingest LS diagrams + parts for gap machines | 🔴 | `scripts/oem-ingest/lsengineers/01-bom-import.ts`. Synthesise an "LS_AGGREGATE" revision per model (LS doesn't expose revisions). |
-| 2.4 | Upsert into Part catalog — if SKU exists, add `LSENGINEERS` to `sources[]` | 🔴 | Same script |
-| 2.5 | For LS-only machines, create Machine rows with `source=LSENGINEERS` | 🔴 | 841 expected |
-| 2.6 | Backfill MachineRevision serial-range data from LS URL slugs (1,131 (model, SAP, rev) tuples) | 🔴 | Today's analysis surfaced these |
-| 2.7 | Tier-2-coverage-report.md update | 🔴 | |
+| 2.1 | After Phase 1 done — list machines where eParts has no BOM | 🟢 | Telehandlers (21 machines, 0 diagrams) + Track/Wheel Dumpers (26 machines, 0 diagrams) confirmed as main gaps. Rollers + light towers well-covered by eParts. |
+| 2.2 | Match by `Machine.modelName` ↔ LS slug | 🟢 | Done for excavators, dumpers, telehandlers. TD9→TD09 normalised; DT08 pro, TD15-3S matched via displayName override. All 48 dumper + 32 telehandler LS models matched to eParts Machine rows. |
+| 2.3 | Ingest LS diagrams + parts — Excavators | 🟢 | `scripts/oem-ingest/lsengineers/01-excavators.ts`. 104 revisions, ~4,360 diagrams. |
+| 2.4 | Ingest LS diagrams + parts — Dumpers (Track + Wheel) | 🟢 | `scripts/oem-ingest/lsengineers/02-dumpers.ts`. 17 revisions, 259 diagrams, 4,203 part lines. |
+| 2.5 | Ingest LS diagrams + parts — Telehandlers | 🟢 | `scripts/oem-ingest/lsengineers/03-telehandlers.ts`. 37 revisions, 1,977 diagrams, 50,246 part lines. |
+| 2.6 | Ingest LS diagrams + parts — Vibrating Rollers | 🔴 | 421 diagrams in jsonl. Write `04-rollers.ts` modelled on 02-dumpers.ts. URL pattern: `/assembly-for-wacker-{model}-vibrating-roller.html` |
+| 2.7 | Ingest LS diagrams + parts — Tower Lights | 🔴 | 332 diagrams in jsonl. Write `05-tower-lights.ts`. |
+| 2.8 | Ingest LS diagrams + parts — remaining categories (Compaction, Concreting, etc.) | 🔴 | 5,167 diagrams across 7 more categories. Decide scope — eParts already has good coverage for most. |
+| 2.9 | Tier-2-coverage-report.md update | 🔴 | |
 
 ### Phase 3 — Tier 3: Enrichment (Neyer + DHS)
 

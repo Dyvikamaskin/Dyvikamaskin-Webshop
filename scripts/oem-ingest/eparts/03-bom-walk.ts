@@ -46,6 +46,9 @@ const categoryFilter = args.includes("--category")
 const limitArg = args.includes("--limit")
   ? parseInt(args[args.indexOf("--limit") + 1])
   : null;
+const sidebarArg = args.includes("--sidebar")
+  ? args[args.indexOf("--sidebar") + 1]
+  : null;
 
 // ---------------------------------------------------------------------------
 // HTTP helper
@@ -191,8 +194,9 @@ async function walkMachine(
         mode: "NUMERIC",
         hasBom: true,
         rawName: rev.name,
+        bomSource: "EPARTS_API",
       },
-      update: { hasBom: true },
+      update: { hasBom: true, bomSource: "EPARTS_API" },
     });
 
     // Walk each component (diagram)
@@ -305,7 +309,8 @@ async function walkMachine(
 // Entry point
 // ---------------------------------------------------------------------------
 async function main() {
-  const sidebar = JSON.parse(fs.readFileSync(SIDEBAR_FILE, "utf8")) as {
+  const sidebarPath = sidebarArg ? path.resolve(sidebarArg) : SIDEBAR_FILE;
+  const sidebar = JSON.parse(fs.readFileSync(sidebarPath, "utf8")) as {
     machines: { code: string; name: string; topCategory: string }[];
   };
 

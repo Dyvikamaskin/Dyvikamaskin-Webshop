@@ -16,6 +16,64 @@ Phases 0–9 of the Dyvika storefront live in production. v4.2 storefront
 redesign still queued unchanged. OEM catalog BOM walk is **in progress**
 (see § below).
 
+## End-of-session state (29 June) — LS ingest extended + Weidemann walk started
+
+### What happened this session (29 June)
+
+| Area | Outcome |
+|---|---|
+| **eParts BOM walk** | Restarted from checkpoint (~3,265/5,632). Completed fully — all machines walked. |
+| **LS Engineers Phase 2 — Dumpers** | `scripts/oem-ingest/lsengineers/02-dumpers.ts` written + run. 15 models (Track + Wheel), 17 revisions, 259 diagrams, 4,203 part lines. TD9→TD09 normalised; DT08 pro + TD15-3S matched. |
+| **LS Engineers Phase 2 — Telehandlers** | `scripts/oem-ingest/lsengineers/03-telehandlers.ts` written + run. 32 models, 37 revisions, 1,977 diagrams, 50,246 part lines. Serial-range slugs (th730-415-04 → "TH730 (415-04)") matched via displayName. |
+| **Weidemann BOM walk** | `scripts/oem-ingest/weidemann/01-bom-walk.ts` running via PHPSESSID cookie (Node script, no browser dependency). Session cookie: `19cbtjhj728ac1pimickanb425` (will expire — get a fresh one after restart). Writes per-machine JSONL files to `data/weidemann_raw/` immediately — no data loss on restart. |
+| **OEM explorer** | `http://localhost:3000/oem-explorer` confirmed working (needs `npm run dev`). |
+| **Storage numbers confirmed** | DB ~2 GB local. After 7-phase dedup: ~165 MB. Plan published. |
+| **BOM source tracking** | `MachineRevision.bomSource` enum: EPARTS_API, LSENGINEERS. Weidemann TBD on ingest. |
+| **Candidate BOM sources** | Swepac (`spareparts.swepac.com`) added to memory. Kramer likely same CATALOGcreator system as Weidemann. |
+
+### LS Engineers — ingested categories as of 29 June
+
+| Category | Script | Revisions | Diagrams |
+|---|---|---|---|
+| Mini Excavator Parts | `01-excavators.ts` | 104 | ~4,360 |
+| Track Dumpers + Wheel Dumpers | `02-dumpers.ts` | 17 | 259 |
+| Telehandlers | `03-telehandlers.ts` | 37 | 1,977 |
+| Vibrating Roller Parts | ❌ not written | 0 | 0 |
+| Tower Light Parts | ❌ not written | 0 | 0 |
+| Compaction, Concreting, etc. | ❌ not written | 0 | 0 |
+
+All remaining LS data is already in `data/lsengineers_diagrams.jsonl` — just need ingest scripts modelled on `01-excavators.ts`.
+
+### Weidemann walk — state on restart
+
+- **Script:** `scripts/oem-ingest/weidemann/01-bom-walk.ts`
+- **Output dir:** `data/weidemann_raw/` — one JSONL file per machine assembly, written immediately
+- **Resume:** script has no checkpoint — re-runs from catalog 0. Already-written files get overwritten (idempotent). No data loss.
+- **Session cookie:** will have expired. Log in at `https://service.weidemann.de`, copy `PHPSESSID` from Chrome DevTools → Application → Cookies → service.weidemann.de. Then:
+  ```powershell
+  cd "C:\Users\Ventura AI\Documents\industriparts"
+  $env:WEIDEMANN_SESSION = "paste-new-cookie-here"
+  npx tsx scripts/oem-ingest/weidemann/01-bom-walk.ts
+  ```
+- **Known issue:** assembly names render as `&nbsp;` HTML entities — the script needs `decodeEntities` pass on `assembly.name` before saving. Low priority — names are cosmetic.
+- **ETA:** ~30–60 min for all 21 catalogs at 200ms/assembly.
+
+### 7-phase DB restructuring plan (current Phase 1)
+
+Full plan at bottom of this section + in memory file. Phase 1 (complete ingest) is in progress. Phases 2–7 blocked on Phase 1 completion.
+
+| Phase | Status |
+|---|---|
+| 1 — Complete ingest (eParts + LS + Weidemann) | 🟡 Weidemann walk in progress |
+| 2 — Add partsHash + canonicalDiagramId to schema | 🔴 blocked |
+| 3 — Backfill partsHash | 🔴 blocked |
+| 4 — Mark canonical diagrams | 🔴 blocked |
+| 5 — Delete duplicate PartLines (7.7M → 263K) | 🔴 blocked |
+| 6 — Image deduplication | 🔴 blocked |
+| 7 — Push to Supabase OEM | 🔴 blocked |
+
+---
+
 ## End-of-session state (26 June) — BOM walk running + DB cleanup complete
 
 ### BOM walk in progress
