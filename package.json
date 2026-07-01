@@ -13,7 +13,18 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:install": "playwright install --with-deps chromium"
+    "test:e2e:install": "playwright install --with-deps chromium",
+
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+
+    "oem:generate": "prisma generate --config prisma/oem/prisma.config.ts",
+    "oem:push": "prisma db push --config prisma/oem/prisma.config.ts",
+    "oem:migrate": "prisma migrate dev --config prisma/oem/prisma.config.ts",
+    "oem:studio": "prisma studio --config prisma/oem/prisma.config.ts"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"

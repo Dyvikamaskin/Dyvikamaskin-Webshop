@@ -61,3 +61,44 @@ next-env.d.ts
 .env.claude-code-pat
 
 .env.claude-code-pat
+
+# WN parts data — large generated/scraped artefacts.
+# Track only the code (*.py) + docs (*.md) in data/.
+data/*.csv
+data/*.json
+data/*.jsonl
+data/*.txt
+data/*.html
+data/*.htm
+data/*.sqlite
+data/*.sqlite.bak*
+data/*.log
+data/*.pdf
+data/*.xlsx
+data/*.png
+data/*.jpg
+data/*.jpeg
+data/*.zip
+data/*.hd3
+data/*.bak
+data/*.bak.*
+data/*.py.bak
+data/eparts/
+data/eparts_pdfs/
+data/eparts_assets/
+data/eparts_assets_smoke/
+data/eparts_smoke/
+data/pdfs/
+data/pdfs_shop/
+data/extracts/
+data/extracts_shop/
+data/drawings/
+data/neyer_images/
+data/__pycache__/
+
+# Prisma data exports (regeneratable)
+prisma/draft/wn_parts_export.json
+
+# Seed script logs
+seed-*.log
+

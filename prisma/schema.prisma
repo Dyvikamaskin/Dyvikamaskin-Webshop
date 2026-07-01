@@ -360,7 +360,8 @@ model MachineMake {
   name String @unique  // "Volvo CE", "Caterpillar", "Komatsu"
   slug String @unique  // "volvo-ce", "caterpillar", "komatsu"
 
-  models MachineModel[]
+  models      MachineModel[]
+  oemMachines OemMachine[]
 }
 
 model MachineModel {
@@ -899,4 +900,264 @@ model BackupRun {
 
   @@index([startedAt])
   @@index([status])
+}
+// ─── OEM parts catalog (Phase v4.3 prep) ─────────────────────────────────────
+// Manufacturer reference data — which OEM part numbers fit which machines, with
+// HD diagrams and click hotspots. NOT the sellable storefront catalog (see
+// Product); this is reference data for "search by OEM number → find Dyvika
+// equivalent" and the interactive parts viewer.
+//
+// Designed generically (Oem*) so the same shape ingests Volvo / JCB /
+// Caterpillar later. Today the only source is shop.wackerneuson.com eParts
+// + extracted PDF parts books.
+
+enum OemCatalogSource {
+  EPARTS_API         // shop.wackerneuson.com /ws/v2/amd/* — preferred
+  PDF                // legacy parts books (PDFs) extracted via pdfplumber/fitz
+  WEIDEMANN_ESERVICE // service.weidemann.de/catalogcreator — dealer-gated agricultural BOMs
+  LSENGINEERS        // lsengineers.co.uk Magento BOM hierarchy (assembly→parts) for big equipment
+  MANUAL             // hand-entered fallback
+}
+
+model OemMachine {
+  id                  String  @id @default(cuid())
+  /// Manufacturer code, e.g. "5000610361" for BPU 3050A US.
+  code                String
+  /// Display name, e.g. "BPU 3050A US".
+  name                String
+  /// Optional FK to the existing MachineMake table. Nullable because the
+  /// generic schema also accepts third-party / not-yet-modelled makes.
+  makeId              String?
+  /// Category breadcrumb from the source catalog, e.g.
+  /// ["Plates", "Reversible", "Diesel"]. Stored as JSON to absorb the
+  /// variable depth across OEMs.
+  categoryPath        Json?
+  /// Set when this machine is a sub-machine (e.g. an engine that the source
+  /// catalog exposes as its own tree). Points at the parent OemMachine.code.
+  parentMachineCode   String?
+  source              OemCatalogSource
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  make      MachineMake?         @relation(fields: [makeId], references: [id], onDelete: SetNull)
+  revisions OemMachineRevision[]
+
+  @@unique([code, source])
+  @@index([makeId])
+  @@index([code])
+  @@index([parentMachineCode])
+}
+
+model OemMachineRevision {
+  id          String  @id @default(cuid())
+  machineId   String
+  /// Revision tag from the source catalog, e.g. "108", "104".
+  revision    String
+  /// Free-form revision name, e.g. "Revision 108".
+  name        String?
+  hasBomTree  Boolean @default(true)
+
+  machine    OemMachine     @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  components OemComponent[]
+
+  @@unique([machineId, revision])
+  @@index([machineId])
+}
+
+model OemComponent {
+  id                    String  @id @default(cuid())
+  revisionId            String
+  /// Sort key as exposed by the source, e.g. 10, 20, 30 (engine = 70 etc).
+  position              Int?
+  /// Human name of the assembly, e.g. "Vibration Plate", "Engine complete".
+  name                  String
+  /// Stable cross-ref into the source catalog. For shop.wackerneuson.com
+  /// this is subProductCode (e.g. "5004907113"). Used to re-fetch the same
+  /// component directly later without re-walking the machine tree.
+  componentCode         String?
+  /// Per-component revision level, distinct from the parent machine's
+  /// revision. E.g. machine rev 108 may reference a component at level 08
+  /// that was introduced earlier.
+  revisionLevel         String?
+  /// When the component lives under a named sub-revision in the source
+  /// (e.g. "Engine"), this is that name. Null for top-level components.
+  subRevisionName       String?
+
+  // ─── Diagram assets ────────────────────────────────────────────────────────
+  /// HD PNG filename (canonical asset name from the source). The actual
+  /// bytes live in local disk (eparts_assets/) for now; v4.3 uploads them
+  /// to Supabase Storage and switches this to a storage key.
+  diagramImageFilename  String?
+  /// Original source media id (Hybris reference) — useful for re-fetch.
+  diagramImageSourceId  String?
+  /// .hd3 click-hotspot JSON (inlined — typical size ~1 KB). Maps callout
+  /// numbers to rectangle coordinates on the diagram. Enables the
+  /// interactive parts viewer.
+  hotspotsJson          Json?
+
+  revision OemMachineRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  parts    OemPart[]
+
+  @@unique([revisionId, componentCode])
+  @@index([revisionId])
+  @@index([componentCode])
+}
+
+model OemPart {
+  id              String  @id @default(cuid())
+  componentId     String
+  /// Callout number on the diagram (e.g. "1", "3", "6a"). Pairs with the
+  /// id field inside the parent component's hotspotsJson.
+  calloutNumber   String?
+  /// OEM part number (e.g. "5000216582", "0183982"). The cross-reference
+  /// target for storefront search ("does Dyvika carry an equivalent?").
+  partNumber      String
+  /// Description / part name from the source.
+  partName        String
+  qty             Int?
+  /// "PC", "KG", "M", etc. Null when the source doesn't specify.
+  unitOfMeasure   String?
+  /// Whether the source flagged this as a recommended-spare. Only the
+  /// older alfis-format PDFs convey this (via bold formatting); SP-format
+  /// and the eParts API don't, so this stays false for most rows.
+  isRecommended   Boolean @default(false)
+  /// Free-form notes — measurement, torque, serial-range caveats etc.
+  notes           String?
+  /// Legacy 7-digit `0xxxxxxx` SAP cross-reference for parts that were
+  /// renumbered when WN migrated to SAP. Backfilled from
+  /// `sku_legacy_modern_map.json` (mined from retailer URL slugs + PDFs).
+  /// Lets the storefront search match either number.
+  legacyPartNumber String?
+
+  component OemComponent @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@index([componentId])
+  @@index([partNumber])
+  @@index([legacyPartNumber])
+}
+
+// ─── Retailer pricing snapshots (admin-only analytical table) ────────────────
+// Captured by the scraper pipeline (hydrotech / dhs / russopower / danseusa /
+// tmsequip / contractorsdirect). Used for sourcing dashboards and
+// "is our price competitive" comparisons. NOT exposed to the storefront.
+
+model PartPriceSnapshot {
+  id          String   @id @default(cuid())
+  /// OEM part number — the join key into OemPart.partNumber. Note this is
+  /// NOT an FK because retailers carry SKUs that aren't yet in the OEM
+  /// catalog (we'd lose data with a strict FK).
+  partNumber  String
+  /// Short retailer identifier, e.g. "hydrotech", "dhs-klevu", "tmsequip".
+  retailer    String
+  currency    String   @default("USD")
+  /// Numeric price string from the scrape (preserved as text to avoid
+  /// rounding; admin tools convert to Decimal as needed).
+  price       String?
+  /// Optional secondary fields some retailers provide.
+  productName String?
+  productUrl  String?
+  imageUrl    String?
+  /// Set when the price is "POA" / "Call for price" / sale-only.
+  isCallForPrice Boolean @default(false)
+  scrapedAt   DateTime @default(now())
+
+  @@index([partNumber])
+  @@index([retailer, scrapedAt])
+  @@index([partNumber, retailer])
+}
+
+// ─── External-source enrichment listings (v4.3 prep) ─────────────────────────
+// Rich per-SKU data sourced from external retailers that publish more than
+// just SKU + price. Initial population from Neyer.de (45,735 Wacker products
+// with title, description, HD images, "Replaces" cross-refs, weight, etc.).
+// Future sources: any retailer where the data is rich enough to enrich our
+// own Product listings.
+//
+// NOT exposed to the storefront directly — admin uses these to populate
+// Dyvika `Product` rows. The PartPriceSnapshot table keeps doing
+// price-comparison; this table holds the prose / images / metadata.
+
+model OemPartListing {
+  id              String   @id @default(cuid())
+  /// Joins loose to OemPart.partNumber and Product.partNumber. Not a FK —
+  /// some external listings may have SKUs we don't yet have in OemPart.
+  partNumber      String
+  /// Source tag, e.g. 'neyer-en', 'neyer-de'. Allows the same SKU to be
+  /// stored multiple times under different locales / sources.
+  source          String
+
+  // ─── Display ─────────────────────────────────────────────────────────────
+  title           String
+  description     String?   // HTML stripped to plain text from source body_html
+  descriptionHtml String?   // Raw body_html from source (for richer admin views)
+  productType     String?   // German vocab from Neyer's product_type
+
+  // ─── Physical ────────────────────────────────────────────────────────────
+  weightGrams     Int?      // Normalised to grams regardless of source unit
+  barcode         String?
+
+  // ─── Cross-references parsed from description ────────────────────────────
+  /// SKUs this part supersedes — parsed from "Replaces item X" in body_html.
+  /// Feeds Product.replacesPartNumbers[] when we map this listing to a
+  /// Dyvika Product.
+  replacesPartNumbers String[]
+
+  // ─── Media (URLs only — not downloaded) ──────────────────────────────────
+  imageUrls       String[]
+  /// Convenience pointer to the hero image (first image in source order).
+  primaryImageUrl String?
+  imageCount      Int       @default(0)
+
+  // ─── Source provenance ───────────────────────────────────────────────────
+  sourceProductId String?   // Source platform's product id (Shopify id, etc.)
+  sourceUrl       String?   // Canonical product URL on the source site
+  sourceCreatedAt DateTime?
+  sourceUpdatedAt DateTime?
+
+  // ─── Pricing (denormalised here for convenience; canonical in PartPriceSnapshot) ─
+  price           String?
+  currency        String?
+
+  scrapedAt       DateTime @default(now())
+
+  @@unique([partNumber, source])
+  @@index([partNumber])
+  @@index([source])
+  @@index([productType])
+}
+
+// ─── Cross-machine fitment (compatibility) ───────────────────────────────────
+// "This SKU fits these machines." Captured from retailer compatibility tables
+// (DHS structured `fitment-table`; LS Engineers "Fits Models" lists; future
+// sources). Keyed by partNumber (string), not by an OemPart FK — because the
+// same SKU can appear in many OemPart rows (different machines/components)
+// and fitment is a property of the SKU itself, not a specific catalog entry.
+//
+// One row per (partNumber, machineModel, source) triple. The
+// `machineNumbers[]` field holds SAP material numbers for variant matches
+// (e.g. DHS lists `5000008060, 5000009545, 5000009472, 5000630045` for the
+// same model row).
+
+model OemPartCompatibility {
+  id             String   @id @default(cuid())
+  /// The SKU this row's fitment applies to. Joins loosely to OemPart.partNumber.
+  partNumber     String
+  /// Manufacturer model code, e.g. "WP1540AW", "TH627", "DPU3060H-TS".
+  machineModel   String?
+  /// Descriptive machine name, e.g. "Vibratory Plate, 15kN, 400mm".
+  machineName    String?
+  /// SAP material numbers for the machine(s) this model code refers to.
+  /// DHS publishes these; LS Engineers usually doesn't.
+  machineNumbers String[]
+  /// Source tag, e.g. "dhs" | "lsengineers".
+  source         String
+  /// URL of the source product page that yielded this row.
+  sourceUrl      String?
+  scrapedAt      DateTime @default(now())
+
+  @@unique([partNumber, machineModel, source])
+  @@index([partNumber])
+  @@index([machineModel])
+  @@index([source])
 }
