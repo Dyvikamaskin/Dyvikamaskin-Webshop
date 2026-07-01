@@ -16,9 +16,8 @@
  */
 
 import { config } from "dotenv";
-config(); // loads .env — OEM_DIRECT_URL points to Supabase here
-const SUPABASE_OEM_DIRECT_URL = process.env.OEM_DIRECT_URL!; // capture before .env.local overrides it
-config({ path: ".env.local", override: true }); // OEM_DATABASE_URL → localhost (source)
+config();
+config({ path: ".env.local", override: true });
 
 import { Pool } from "pg";
 
@@ -31,7 +30,7 @@ const src = new Pool({ connectionString: process.env.OEM_DATABASE_URL! });
 
 // Target: Supabase OEM (use DIRECT URL to bypass pooler for bulk inserts)
 const dst = new Pool({
-  connectionString: SUPABASE_OEM_DIRECT_URL,
+  connectionString: process.env.OEM_DIRECT_URL!,
   max: 5,
   statement_timeout: 120_000,
 });

@@ -31,7 +31,7 @@ This project has **two separate Supabase accounts and three database targets**. 
 - **Credentials:** `postgres` / `postgres`
 - **Purpose:** BOM walk ingest + local exploration before pushing to OEM Supabase
 - **Active when:** `.env.local` has `OEM_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/oem_catalog`
-- **Switch to Supabase:** remove or comment out the two OEM lines in `.env.local`
+- **Switch to Supabase:** remove or comment out `OEM_DATABASE_URL` in `.env.local` — `OEM_DIRECT_URL` always points to Supabase and must NOT be overridden locally (push scripts use it as the write destination)
 
 ## Env loading for scripts
 Scripts use dotenv with two-step load — `.env` first, `.env.local` overrides:
