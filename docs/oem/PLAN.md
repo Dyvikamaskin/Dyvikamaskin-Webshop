@@ -111,7 +111,27 @@ extracted for the new ~3,300.
 | 1.8 | Operating manuals: store URLs only, fetch on demand | ⏸ | 9,114 unique PDFs / ~99 GB if downloaded — exceeds Pro's 100 GB Storage budget on its own. Keep eParts signed URLs in `MachineRevision.operatingManuals` Json field, fetch on demand from the eParts media endpoint (URLs are durable). |
 | 1.9 | Backfill `Part.aliases` from `data/sku_legacy_modern_map.json` for new parts | 🔴 | Re-apply after BOM walk extends Part catalog |
 | 1.10 | Tier-1-coverage-report.md — which machines have full BOM, which still empty | 🔴 | One-off SQL query + summary write-up. Also re-run `data/overlap_ls_vs_eparts.py` against the full DB (was run against old 572-machine set only). |
-| 1.11 | Add `partsHash` column to `Diagram` schema + post-walk dedup pass | 🔴 | **Dedup rule: two Diagram rows are identical iff their full parts list (sorted SKUs + callout numbers + quantities) matches — title and machine are irrelevant.** Compute SHA256 of sorted parts list, store in `Diagram.partsHash`. Merge duplicate Diagram rows: consolidate PartLine rows, update foreign keys. Run before Phase 2 so LS ingest can upsert by hash rather than create duplicates. This also powers the compatibility feature — "other machines using this part" = graph traversal through shared Diagram nodes. |
+| 1.11 | Add `partsHash` + `canonicalDiagramId` to `Diagram` schema + dedup pass | 🟢 | **Done 2026-06-30.** Schema migration applied via raw SQL (`scripts/oem-ingest/migrate-add-parts-hash.ts`). 475,019 diagrams hashed in 288s (`scripts/oem-ingest/03-backfill-parts-hash.ts`). Hash = MD5(string_agg of partId\|callout\|qty ORDER BY callout,partId); 'EMPTY' for zero-PartLine diagrams. **See dedup findings below.** |
+| 4 | Elect canonical diagrams — one per partsHash group | 🔴 | Write `scripts/oem-ingest/04-elect-canonicals.ts`. For each partsHash group elect the oldest Diagram (lowest cuid) as canonical; set `canonicalDiagramId` on all others pointing to it. |
+| 5 | Delete duplicate PartLines | 🔴 | After canonicals elected: delete PartLine rows for all non-canonical Diagrams. Reduces ~7.6M → ~263K PartLine rows. |
+
+#### Diagram dedup findings (2026-06-30) — IMPORTANT
+
+Empirical analysis of 475,019 eParts diagrams revealed two distinct dedup problems that **must be handled separately**:
+
+| Problem | Count | Implication |
+|---|---|---|
+| **False positives** — same partsHash, different diagramImageKey | 15,131 hash groups | partsHash alone cannot drive image dedup. Two diagrams can have identical part lists but different images (e.g. G25 vs G50 "Upper Enclosure" — structurally identical BOM, visually different wiring diagrams). |
+| **Inverse problem** — same diagramImageKey, different partsHash | 9,135 image groups | Image dedup alone would incorrectly merge diagrams. Same illustration reused across machine generations but with different part numbers (e.g. G70 pos 342 = part 5000161071; G100 pos 342 = part 5000171594 — zero machine overlap, genuinely different parts). |
+
+**Confirmed via eParts cross-reference (2026-06-30):** G70 part 5000161071 fits 681 machine/revision combinations (G50/G70 family); G100 part 5000171594 fits 1,173 (G100/G120/G150/G180 family). Machine populations are strictly non-overlapping. Image dedup would silently lose the correct part number for one generation.
+
+**Weidemann:** also has false positives (same hash, different mediaIds). No inverse problem — Weidemann dedupes images at the server level (mediaId = same file), so same image always means same mediaId. But partsHash is still not a reliable image dedup key for Weidemann either.
+
+**Dedup strategy (locked):**
+- **PartLine dedup** → use `partsHash` → `canonicalDiagramId`. One canonical Diagram row per unique parts list; non-canonicals keep their `diagramImageKey` but lose their PartLine rows (FK to canonical).
+- **Image storage dedup** → use `diagramImageKey` directly. Dedupe files on disk / in Storage bucket by key — not by hash.
+- Do NOT use partsHash to drive image dedup. Do NOT use diagramImageKey to drive PartLine dedup.
 
 **Expected after Phase 1:** 4,338 Machines, ~8K-10K Revisions, ~200K-400K
 Diagrams, ~80K-150K canonical Parts, 5-15M PartLines.

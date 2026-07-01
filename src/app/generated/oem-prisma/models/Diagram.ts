@@ -44,6 +44,8 @@ export type DiagramMinAggregateOutputType = {
   subRevisionName: string | null
   diagramImageKey: string | null
   diagramImageSourceId: string | null
+  partsHash: string | null
+  canonicalDiagramId: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -58,6 +60,8 @@ export type DiagramMaxAggregateOutputType = {
   subRevisionName: string | null
   diagramImageKey: string | null
   diagramImageSourceId: string | null
+  partsHash: string | null
+  canonicalDiagramId: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -72,6 +76,8 @@ export type DiagramCountAggregateOutputType = {
   subRevisionName: number
   diagramImageKey: number
   diagramImageSourceId: number
+  partsHash: number
+  canonicalDiagramId: number
   hotspotsJson: number
   createdAt: number
   updatedAt: number
@@ -97,6 +103,8 @@ export type DiagramMinAggregateInputType = {
   subRevisionName?: true
   diagramImageKey?: true
   diagramImageSourceId?: true
+  partsHash?: true
+  canonicalDiagramId?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -111,6 +119,8 @@ export type DiagramMaxAggregateInputType = {
   subRevisionName?: true
   diagramImageKey?: true
   diagramImageSourceId?: true
+  partsHash?: true
+  canonicalDiagramId?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -125,6 +135,8 @@ export type DiagramCountAggregateInputType = {
   subRevisionName?: true
   diagramImageKey?: true
   diagramImageSourceId?: true
+  partsHash?: true
+  canonicalDiagramId?: true
   hotspotsJson?: true
   createdAt?: true
   updatedAt?: true
@@ -227,6 +239,8 @@ export type DiagramGroupByOutputType = {
   subRevisionName: string | null
   diagramImageKey: string | null
   diagramImageSourceId: string | null
+  partsHash: string | null
+  canonicalDiagramId: string | null
   hotspotsJson: runtime.JsonValue | null
   createdAt: Date
   updatedAt: Date
@@ -265,9 +279,13 @@ export type DiagramWhereInput = {
   subRevisionName?: Prisma.StringNullableFilter<"Diagram"> | string | null
   diagramImageKey?: Prisma.StringNullableFilter<"Diagram"> | string | null
   diagramImageSourceId?: Prisma.StringNullableFilter<"Diagram"> | string | null
+  partsHash?: Prisma.StringNullableFilter<"Diagram"> | string | null
+  canonicalDiagramId?: Prisma.StringNullableFilter<"Diagram"> | string | null
   hotspotsJson?: Prisma.JsonNullableFilter<"Diagram">
   createdAt?: Prisma.DateTimeFilter<"Diagram"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Diagram"> | Date | string
+  canonical?: Prisma.XOR<Prisma.DiagramNullableScalarRelationFilter, Prisma.DiagramWhereInput> | null
+  duplicates?: Prisma.DiagramListRelationFilter
   revision?: Prisma.XOR<Prisma.MachineRevisionScalarRelationFilter, Prisma.MachineRevisionWhereInput>
   lines?: Prisma.PartLineListRelationFilter
 }
@@ -282,9 +300,13 @@ export type DiagramOrderByWithRelationInput = {
   subRevisionName?: Prisma.SortOrderInput | Prisma.SortOrder
   diagramImageKey?: Prisma.SortOrderInput | Prisma.SortOrder
   diagramImageSourceId?: Prisma.SortOrderInput | Prisma.SortOrder
+  partsHash?: Prisma.SortOrderInput | Prisma.SortOrder
+  canonicalDiagramId?: Prisma.SortOrderInput | Prisma.SortOrder
   hotspotsJson?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
+  canonical?: Prisma.DiagramOrderByWithRelationInput
+  duplicates?: Prisma.DiagramOrderByRelationAggregateInput
   revision?: Prisma.MachineRevisionOrderByWithRelationInput
   lines?: Prisma.PartLineOrderByRelationAggregateInput
 }
@@ -303,9 +325,13 @@ export type DiagramWhereUniqueInput = Prisma.AtLeast<{
   subRevisionName?: Prisma.StringNullableFilter<"Diagram"> | string | null
   diagramImageKey?: Prisma.StringNullableFilter<"Diagram"> | string | null
   diagramImageSourceId?: Prisma.StringNullableFilter<"Diagram"> | string | null
+  partsHash?: Prisma.StringNullableFilter<"Diagram"> | string | null
+  canonicalDiagramId?: Prisma.StringNullableFilter<"Diagram"> | string | null
   hotspotsJson?: Prisma.JsonNullableFilter<"Diagram">
   createdAt?: Prisma.DateTimeFilter<"Diagram"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Diagram"> | Date | string
+  canonical?: Prisma.XOR<Prisma.DiagramNullableScalarRelationFilter, Prisma.DiagramWhereInput> | null
+  duplicates?: Prisma.DiagramListRelationFilter
   revision?: Prisma.XOR<Prisma.MachineRevisionScalarRelationFilter, Prisma.MachineRevisionWhereInput>
   lines?: Prisma.PartLineListRelationFilter
 }, "id" | "revisionId_componentCode">
@@ -320,6 +346,8 @@ export type DiagramOrderByWithAggregationInput = {
   subRevisionName?: Prisma.SortOrderInput | Prisma.SortOrder
   diagramImageKey?: Prisma.SortOrderInput | Prisma.SortOrder
   diagramImageSourceId?: Prisma.SortOrderInput | Prisma.SortOrder
+  partsHash?: Prisma.SortOrderInput | Prisma.SortOrder
+  canonicalDiagramId?: Prisma.SortOrderInput | Prisma.SortOrder
   hotspotsJson?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -343,6 +371,8 @@ export type DiagramScalarWhereWithAggregatesInput = {
   subRevisionName?: Prisma.StringNullableWithAggregatesFilter<"Diagram"> | string | null
   diagramImageKey?: Prisma.StringNullableWithAggregatesFilter<"Diagram"> | string | null
   diagramImageSourceId?: Prisma.StringNullableWithAggregatesFilter<"Diagram"> | string | null
+  partsHash?: Prisma.StringNullableWithAggregatesFilter<"Diagram"> | string | null
+  canonicalDiagramId?: Prisma.StringNullableWithAggregatesFilter<"Diagram"> | string | null
   hotspotsJson?: Prisma.JsonNullableWithAggregatesFilter<"Diagram">
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Diagram"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"Diagram"> | Date | string
@@ -357,9 +387,12 @@ export type DiagramCreateInput = {
   subRevisionName?: string | null
   diagramImageKey?: string | null
   diagramImageSourceId?: string | null
+  partsHash?: string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  canonical?: Prisma.DiagramCreateNestedOneWithoutDuplicatesInput
+  duplicates?: Prisma.DiagramCreateNestedManyWithoutCanonicalInput
   revision: Prisma.MachineRevisionCreateNestedOneWithoutDiagramsInput
   lines?: Prisma.PartLineCreateNestedManyWithoutDiagramInput
 }
@@ -374,9 +407,12 @@ export type DiagramUncheckedCreateInput = {
   subRevisionName?: string | null
   diagramImageKey?: string | null
   diagramImageSourceId?: string | null
+  partsHash?: string | null
+  canonicalDiagramId?: string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  duplicates?: Prisma.DiagramUncheckedCreateNestedManyWithoutCanonicalInput
   lines?: Prisma.PartLineUncheckedCreateNestedManyWithoutDiagramInput
 }
 
@@ -389,9 +425,12 @@ export type DiagramUpdateInput = {
   subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  canonical?: Prisma.DiagramUpdateOneWithoutDuplicatesNestedInput
+  duplicates?: Prisma.DiagramUpdateManyWithoutCanonicalNestedInput
   revision?: Prisma.MachineRevisionUpdateOneRequiredWithoutDiagramsNestedInput
   lines?: Prisma.PartLineUpdateManyWithoutDiagramNestedInput
 }
@@ -406,9 +445,12 @@ export type DiagramUncheckedUpdateInput = {
   subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  canonicalDiagramId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  duplicates?: Prisma.DiagramUncheckedUpdateManyWithoutCanonicalNestedInput
   lines?: Prisma.PartLineUncheckedUpdateManyWithoutDiagramNestedInput
 }
 
@@ -422,6 +464,8 @@ export type DiagramCreateManyInput = {
   subRevisionName?: string | null
   diagramImageKey?: string | null
   diagramImageSourceId?: string | null
+  partsHash?: string | null
+  canonicalDiagramId?: string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -436,6 +480,7 @@ export type DiagramUpdateManyMutationInput = {
   subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -451,6 +496,8 @@ export type DiagramUncheckedUpdateManyInput = {
   subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  canonicalDiagramId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -464,6 +511,11 @@ export type DiagramListRelationFilter = {
 
 export type DiagramOrderByRelationAggregateInput = {
   _count?: Prisma.SortOrder
+}
+
+export type DiagramNullableScalarRelationFilter = {
+  is?: Prisma.DiagramWhereInput | null
+  isNot?: Prisma.DiagramWhereInput | null
 }
 
 export type DiagramRevisionIdComponentCodeCompoundUniqueInput = {
@@ -481,6 +533,8 @@ export type DiagramCountOrderByAggregateInput = {
   subRevisionName?: Prisma.SortOrder
   diagramImageKey?: Prisma.SortOrder
   diagramImageSourceId?: Prisma.SortOrder
+  partsHash?: Prisma.SortOrder
+  canonicalDiagramId?: Prisma.SortOrder
   hotspotsJson?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -500,6 +554,8 @@ export type DiagramMaxOrderByAggregateInput = {
   subRevisionName?: Prisma.SortOrder
   diagramImageKey?: Prisma.SortOrder
   diagramImageSourceId?: Prisma.SortOrder
+  partsHash?: Prisma.SortOrder
+  canonicalDiagramId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -514,6 +570,8 @@ export type DiagramMinOrderByAggregateInput = {
   subRevisionName?: Prisma.SortOrder
   diagramImageKey?: Prisma.SortOrder
   diagramImageSourceId?: Prisma.SortOrder
+  partsHash?: Prisma.SortOrder
+  canonicalDiagramId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -569,12 +627,70 @@ export type DiagramUncheckedUpdateManyWithoutRevisionNestedInput = {
   deleteMany?: Prisma.DiagramScalarWhereInput | Prisma.DiagramScalarWhereInput[]
 }
 
+export type DiagramCreateNestedOneWithoutDuplicatesInput = {
+  create?: Prisma.XOR<Prisma.DiagramCreateWithoutDuplicatesInput, Prisma.DiagramUncheckedCreateWithoutDuplicatesInput>
+  connectOrCreate?: Prisma.DiagramCreateOrConnectWithoutDuplicatesInput
+  connect?: Prisma.DiagramWhereUniqueInput
+}
+
+export type DiagramCreateNestedManyWithoutCanonicalInput = {
+  create?: Prisma.XOR<Prisma.DiagramCreateWithoutCanonicalInput, Prisma.DiagramUncheckedCreateWithoutCanonicalInput> | Prisma.DiagramCreateWithoutCanonicalInput[] | Prisma.DiagramUncheckedCreateWithoutCanonicalInput[]
+  connectOrCreate?: Prisma.DiagramCreateOrConnectWithoutCanonicalInput | Prisma.DiagramCreateOrConnectWithoutCanonicalInput[]
+  createMany?: Prisma.DiagramCreateManyCanonicalInputEnvelope
+  connect?: Prisma.DiagramWhereUniqueInput | Prisma.DiagramWhereUniqueInput[]
+}
+
+export type DiagramUncheckedCreateNestedManyWithoutCanonicalInput = {
+  create?: Prisma.XOR<Prisma.DiagramCreateWithoutCanonicalInput, Prisma.DiagramUncheckedCreateWithoutCanonicalInput> | Prisma.DiagramCreateWithoutCanonicalInput[] | Prisma.DiagramUncheckedCreateWithoutCanonicalInput[]
+  connectOrCreate?: Prisma.DiagramCreateOrConnectWithoutCanonicalInput | Prisma.DiagramCreateOrConnectWithoutCanonicalInput[]
+  createMany?: Prisma.DiagramCreateManyCanonicalInputEnvelope
+  connect?: Prisma.DiagramWhereUniqueInput | Prisma.DiagramWhereUniqueInput[]
+}
+
 export type NullableIntFieldUpdateOperationsInput = {
   set?: number | null
   increment?: number
   decrement?: number
   multiply?: number
   divide?: number
+}
+
+export type DiagramUpdateOneWithoutDuplicatesNestedInput = {
+  create?: Prisma.XOR<Prisma.DiagramCreateWithoutDuplicatesInput, Prisma.DiagramUncheckedCreateWithoutDuplicatesInput>
+  connectOrCreate?: Prisma.DiagramCreateOrConnectWithoutDuplicatesInput
+  upsert?: Prisma.DiagramUpsertWithoutDuplicatesInput
+  disconnect?: Prisma.DiagramWhereInput | boolean
+  delete?: Prisma.DiagramWhereInput | boolean
+  connect?: Prisma.DiagramWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.DiagramUpdateToOneWithWhereWithoutDuplicatesInput, Prisma.DiagramUpdateWithoutDuplicatesInput>, Prisma.DiagramUncheckedUpdateWithoutDuplicatesInput>
+}
+
+export type DiagramUpdateManyWithoutCanonicalNestedInput = {
+  create?: Prisma.XOR<Prisma.DiagramCreateWithoutCanonicalInput, Prisma.DiagramUncheckedCreateWithoutCanonicalInput> | Prisma.DiagramCreateWithoutCanonicalInput[] | Prisma.DiagramUncheckedCreateWithoutCanonicalInput[]
+  connectOrCreate?: Prisma.DiagramCreateOrConnectWithoutCanonicalInput | Prisma.DiagramCreateOrConnectWithoutCanonicalInput[]
+  upsert?: Prisma.DiagramUpsertWithWhereUniqueWithoutCanonicalInput | Prisma.DiagramUpsertWithWhereUniqueWithoutCanonicalInput[]
+  createMany?: Prisma.DiagramCreateManyCanonicalInputEnvelope
+  set?: Prisma.DiagramWhereUniqueInput | Prisma.DiagramWhereUniqueInput[]
+  disconnect?: Prisma.DiagramWhereUniqueInput | Prisma.DiagramWhereUniqueInput[]
+  delete?: Prisma.DiagramWhereUniqueInput | Prisma.DiagramWhereUniqueInput[]
+  connect?: Prisma.DiagramWhereUniqueInput | Prisma.DiagramWhereUniqueInput[]
+  update?: Prisma.DiagramUpdateWithWhereUniqueWithoutCanonicalInput | Prisma.DiagramUpdateWithWhereUniqueWithoutCanonicalInput[]
+  updateMany?: Prisma.DiagramUpdateManyWithWhereWithoutCanonicalInput | Prisma.DiagramUpdateManyWithWhereWithoutCanonicalInput[]
+  deleteMany?: Prisma.DiagramScalarWhereInput | Prisma.DiagramScalarWhereInput[]
+}
+
+export type DiagramUncheckedUpdateManyWithoutCanonicalNestedInput = {
+  create?: Prisma.XOR<Prisma.DiagramCreateWithoutCanonicalInput, Prisma.DiagramUncheckedCreateWithoutCanonicalInput> | Prisma.DiagramCreateWithoutCanonicalInput[] | Prisma.DiagramUncheckedCreateWithoutCanonicalInput[]
+  connectOrCreate?: Prisma.DiagramCreateOrConnectWithoutCanonicalInput | Prisma.DiagramCreateOrConnectWithoutCanonicalInput[]
+  upsert?: Prisma.DiagramUpsertWithWhereUniqueWithoutCanonicalInput | Prisma.DiagramUpsertWithWhereUniqueWithoutCanonicalInput[]
+  createMany?: Prisma.DiagramCreateManyCanonicalInputEnvelope
+  set?: Prisma.DiagramWhereUniqueInput | Prisma.DiagramWhereUniqueInput[]
+  disconnect?: Prisma.DiagramWhereUniqueInput | Prisma.DiagramWhereUniqueInput[]
+  delete?: Prisma.DiagramWhereUniqueInput | Prisma.DiagramWhereUniqueInput[]
+  connect?: Prisma.DiagramWhereUniqueInput | Prisma.DiagramWhereUniqueInput[]
+  update?: Prisma.DiagramUpdateWithWhereUniqueWithoutCanonicalInput | Prisma.DiagramUpdateWithWhereUniqueWithoutCanonicalInput[]
+  updateMany?: Prisma.DiagramUpdateManyWithWhereWithoutCanonicalInput | Prisma.DiagramUpdateManyWithWhereWithoutCanonicalInput[]
+  deleteMany?: Prisma.DiagramScalarWhereInput | Prisma.DiagramScalarWhereInput[]
 }
 
 export type DiagramCreateNestedOneWithoutLinesInput = {
@@ -600,9 +716,12 @@ export type DiagramCreateWithoutRevisionInput = {
   subRevisionName?: string | null
   diagramImageKey?: string | null
   diagramImageSourceId?: string | null
+  partsHash?: string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  canonical?: Prisma.DiagramCreateNestedOneWithoutDuplicatesInput
+  duplicates?: Prisma.DiagramCreateNestedManyWithoutCanonicalInput
   lines?: Prisma.PartLineCreateNestedManyWithoutDiagramInput
 }
 
@@ -615,9 +734,12 @@ export type DiagramUncheckedCreateWithoutRevisionInput = {
   subRevisionName?: string | null
   diagramImageKey?: string | null
   diagramImageSourceId?: string | null
+  partsHash?: string | null
+  canonicalDiagramId?: string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  duplicates?: Prisma.DiagramUncheckedCreateNestedManyWithoutCanonicalInput
   lines?: Prisma.PartLineUncheckedCreateNestedManyWithoutDiagramInput
 }
 
@@ -660,9 +782,161 @@ export type DiagramScalarWhereInput = {
   subRevisionName?: Prisma.StringNullableFilter<"Diagram"> | string | null
   diagramImageKey?: Prisma.StringNullableFilter<"Diagram"> | string | null
   diagramImageSourceId?: Prisma.StringNullableFilter<"Diagram"> | string | null
+  partsHash?: Prisma.StringNullableFilter<"Diagram"> | string | null
+  canonicalDiagramId?: Prisma.StringNullableFilter<"Diagram"> | string | null
   hotspotsJson?: Prisma.JsonNullableFilter<"Diagram">
   createdAt?: Prisma.DateTimeFilter<"Diagram"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Diagram"> | Date | string
+}
+
+export type DiagramCreateWithoutDuplicatesInput = {
+  id?: string
+  position?: number | null
+  name: string
+  componentCode?: string | null
+  revisionLevel?: string | null
+  subRevisionName?: string | null
+  diagramImageKey?: string | null
+  diagramImageSourceId?: string | null
+  partsHash?: string | null
+  hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  canonical?: Prisma.DiagramCreateNestedOneWithoutDuplicatesInput
+  revision: Prisma.MachineRevisionCreateNestedOneWithoutDiagramsInput
+  lines?: Prisma.PartLineCreateNestedManyWithoutDiagramInput
+}
+
+export type DiagramUncheckedCreateWithoutDuplicatesInput = {
+  id?: string
+  revisionId: string
+  position?: number | null
+  name: string
+  componentCode?: string | null
+  revisionLevel?: string | null
+  subRevisionName?: string | null
+  diagramImageKey?: string | null
+  diagramImageSourceId?: string | null
+  partsHash?: string | null
+  canonicalDiagramId?: string | null
+  hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  lines?: Prisma.PartLineUncheckedCreateNestedManyWithoutDiagramInput
+}
+
+export type DiagramCreateOrConnectWithoutDuplicatesInput = {
+  where: Prisma.DiagramWhereUniqueInput
+  create: Prisma.XOR<Prisma.DiagramCreateWithoutDuplicatesInput, Prisma.DiagramUncheckedCreateWithoutDuplicatesInput>
+}
+
+export type DiagramCreateWithoutCanonicalInput = {
+  id?: string
+  position?: number | null
+  name: string
+  componentCode?: string | null
+  revisionLevel?: string | null
+  subRevisionName?: string | null
+  diagramImageKey?: string | null
+  diagramImageSourceId?: string | null
+  partsHash?: string | null
+  hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  duplicates?: Prisma.DiagramCreateNestedManyWithoutCanonicalInput
+  revision: Prisma.MachineRevisionCreateNestedOneWithoutDiagramsInput
+  lines?: Prisma.PartLineCreateNestedManyWithoutDiagramInput
+}
+
+export type DiagramUncheckedCreateWithoutCanonicalInput = {
+  id?: string
+  revisionId: string
+  position?: number | null
+  name: string
+  componentCode?: string | null
+  revisionLevel?: string | null
+  subRevisionName?: string | null
+  diagramImageKey?: string | null
+  diagramImageSourceId?: string | null
+  partsHash?: string | null
+  hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  duplicates?: Prisma.DiagramUncheckedCreateNestedManyWithoutCanonicalInput
+  lines?: Prisma.PartLineUncheckedCreateNestedManyWithoutDiagramInput
+}
+
+export type DiagramCreateOrConnectWithoutCanonicalInput = {
+  where: Prisma.DiagramWhereUniqueInput
+  create: Prisma.XOR<Prisma.DiagramCreateWithoutCanonicalInput, Prisma.DiagramUncheckedCreateWithoutCanonicalInput>
+}
+
+export type DiagramCreateManyCanonicalInputEnvelope = {
+  data: Prisma.DiagramCreateManyCanonicalInput | Prisma.DiagramCreateManyCanonicalInput[]
+  skipDuplicates?: boolean
+}
+
+export type DiagramUpsertWithoutDuplicatesInput = {
+  update: Prisma.XOR<Prisma.DiagramUpdateWithoutDuplicatesInput, Prisma.DiagramUncheckedUpdateWithoutDuplicatesInput>
+  create: Prisma.XOR<Prisma.DiagramCreateWithoutDuplicatesInput, Prisma.DiagramUncheckedCreateWithoutDuplicatesInput>
+  where?: Prisma.DiagramWhereInput
+}
+
+export type DiagramUpdateToOneWithWhereWithoutDuplicatesInput = {
+  where?: Prisma.DiagramWhereInput
+  data: Prisma.XOR<Prisma.DiagramUpdateWithoutDuplicatesInput, Prisma.DiagramUncheckedUpdateWithoutDuplicatesInput>
+}
+
+export type DiagramUpdateWithoutDuplicatesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  position?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  componentCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  revisionLevel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  canonical?: Prisma.DiagramUpdateOneWithoutDuplicatesNestedInput
+  revision?: Prisma.MachineRevisionUpdateOneRequiredWithoutDiagramsNestedInput
+  lines?: Prisma.PartLineUpdateManyWithoutDiagramNestedInput
+}
+
+export type DiagramUncheckedUpdateWithoutDuplicatesInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  revisionId?: Prisma.StringFieldUpdateOperationsInput | string
+  position?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  componentCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  revisionLevel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  canonicalDiagramId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  lines?: Prisma.PartLineUncheckedUpdateManyWithoutDiagramNestedInput
+}
+
+export type DiagramUpsertWithWhereUniqueWithoutCanonicalInput = {
+  where: Prisma.DiagramWhereUniqueInput
+  update: Prisma.XOR<Prisma.DiagramUpdateWithoutCanonicalInput, Prisma.DiagramUncheckedUpdateWithoutCanonicalInput>
+  create: Prisma.XOR<Prisma.DiagramCreateWithoutCanonicalInput, Prisma.DiagramUncheckedCreateWithoutCanonicalInput>
+}
+
+export type DiagramUpdateWithWhereUniqueWithoutCanonicalInput = {
+  where: Prisma.DiagramWhereUniqueInput
+  data: Prisma.XOR<Prisma.DiagramUpdateWithoutCanonicalInput, Prisma.DiagramUncheckedUpdateWithoutCanonicalInput>
+}
+
+export type DiagramUpdateManyWithWhereWithoutCanonicalInput = {
+  where: Prisma.DiagramScalarWhereInput
+  data: Prisma.XOR<Prisma.DiagramUpdateManyMutationInput, Prisma.DiagramUncheckedUpdateManyWithoutCanonicalInput>
 }
 
 export type DiagramCreateWithoutLinesInput = {
@@ -674,9 +948,12 @@ export type DiagramCreateWithoutLinesInput = {
   subRevisionName?: string | null
   diagramImageKey?: string | null
   diagramImageSourceId?: string | null
+  partsHash?: string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  canonical?: Prisma.DiagramCreateNestedOneWithoutDuplicatesInput
+  duplicates?: Prisma.DiagramCreateNestedManyWithoutCanonicalInput
   revision: Prisma.MachineRevisionCreateNestedOneWithoutDiagramsInput
 }
 
@@ -690,9 +967,12 @@ export type DiagramUncheckedCreateWithoutLinesInput = {
   subRevisionName?: string | null
   diagramImageKey?: string | null
   diagramImageSourceId?: string | null
+  partsHash?: string | null
+  canonicalDiagramId?: string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
+  duplicates?: Prisma.DiagramUncheckedCreateNestedManyWithoutCanonicalInput
 }
 
 export type DiagramCreateOrConnectWithoutLinesInput = {
@@ -720,9 +1000,12 @@ export type DiagramUpdateWithoutLinesInput = {
   subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  canonical?: Prisma.DiagramUpdateOneWithoutDuplicatesNestedInput
+  duplicates?: Prisma.DiagramUpdateManyWithoutCanonicalNestedInput
   revision?: Prisma.MachineRevisionUpdateOneRequiredWithoutDiagramsNestedInput
 }
 
@@ -736,9 +1019,12 @@ export type DiagramUncheckedUpdateWithoutLinesInput = {
   subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  canonicalDiagramId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  duplicates?: Prisma.DiagramUncheckedUpdateManyWithoutCanonicalNestedInput
 }
 
 export type DiagramCreateManyRevisionInput = {
@@ -750,6 +1036,8 @@ export type DiagramCreateManyRevisionInput = {
   subRevisionName?: string | null
   diagramImageKey?: string | null
   diagramImageSourceId?: string | null
+  partsHash?: string | null
+  canonicalDiagramId?: string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -764,9 +1052,12 @@ export type DiagramUpdateWithoutRevisionInput = {
   subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  canonical?: Prisma.DiagramUpdateOneWithoutDuplicatesNestedInput
+  duplicates?: Prisma.DiagramUpdateManyWithoutCanonicalNestedInput
   lines?: Prisma.PartLineUpdateManyWithoutDiagramNestedInput
 }
 
@@ -779,9 +1070,12 @@ export type DiagramUncheckedUpdateWithoutRevisionInput = {
   subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  canonicalDiagramId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  duplicates?: Prisma.DiagramUncheckedUpdateManyWithoutCanonicalNestedInput
   lines?: Prisma.PartLineUncheckedUpdateManyWithoutDiagramNestedInput
 }
 
@@ -794,6 +1088,76 @@ export type DiagramUncheckedUpdateManyWithoutRevisionInput = {
   subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  canonicalDiagramId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
+export type DiagramCreateManyCanonicalInput = {
+  id?: string
+  revisionId: string
+  position?: number | null
+  name: string
+  componentCode?: string | null
+  revisionLevel?: string | null
+  subRevisionName?: string | null
+  diagramImageKey?: string | null
+  diagramImageSourceId?: string | null
+  partsHash?: string | null
+  hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Date | string
+  updatedAt?: Date | string
+}
+
+export type DiagramUpdateWithoutCanonicalInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  position?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  componentCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  revisionLevel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  duplicates?: Prisma.DiagramUpdateManyWithoutCanonicalNestedInput
+  revision?: Prisma.MachineRevisionUpdateOneRequiredWithoutDiagramsNestedInput
+  lines?: Prisma.PartLineUpdateManyWithoutDiagramNestedInput
+}
+
+export type DiagramUncheckedUpdateWithoutCanonicalInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  revisionId?: Prisma.StringFieldUpdateOperationsInput | string
+  position?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  componentCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  revisionLevel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  duplicates?: Prisma.DiagramUncheckedUpdateManyWithoutCanonicalNestedInput
+  lines?: Prisma.PartLineUncheckedUpdateManyWithoutDiagramNestedInput
+}
+
+export type DiagramUncheckedUpdateManyWithoutCanonicalInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  revisionId?: Prisma.StringFieldUpdateOperationsInput | string
+  position?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  componentCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  revisionLevel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  subRevisionName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  diagramImageKey?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  diagramImageSourceId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  partsHash?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   hotspotsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -805,10 +1169,12 @@ export type DiagramUncheckedUpdateManyWithoutRevisionInput = {
  */
 
 export type DiagramCountOutputType = {
+  duplicates: number
   lines: number
 }
 
 export type DiagramCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  duplicates?: boolean | DiagramCountOutputTypeCountDuplicatesArgs
   lines?: boolean | DiagramCountOutputTypeCountLinesArgs
 }
 
@@ -820,6 +1186,13 @@ export type DiagramCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Exte
    * Select specific fields to fetch from the DiagramCountOutputType
    */
   select?: Prisma.DiagramCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * DiagramCountOutputType without action
+ */
+export type DiagramCountOutputTypeCountDuplicatesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.DiagramWhereInput
 }
 
 /**
@@ -840,9 +1213,13 @@ export type DiagramSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   subRevisionName?: boolean
   diagramImageKey?: boolean
   diagramImageSourceId?: boolean
+  partsHash?: boolean
+  canonicalDiagramId?: boolean
   hotspotsJson?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  canonical?: boolean | Prisma.Diagram$canonicalArgs<ExtArgs>
+  duplicates?: boolean | Prisma.Diagram$duplicatesArgs<ExtArgs>
   revision?: boolean | Prisma.MachineRevisionDefaultArgs<ExtArgs>
   lines?: boolean | Prisma.Diagram$linesArgs<ExtArgs>
   _count?: boolean | Prisma.DiagramCountOutputTypeDefaultArgs<ExtArgs>
@@ -858,9 +1235,12 @@ export type DiagramSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exten
   subRevisionName?: boolean
   diagramImageKey?: boolean
   diagramImageSourceId?: boolean
+  partsHash?: boolean
+  canonicalDiagramId?: boolean
   hotspotsJson?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  canonical?: boolean | Prisma.Diagram$canonicalArgs<ExtArgs>
   revision?: boolean | Prisma.MachineRevisionDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["diagram"]>
 
@@ -874,9 +1254,12 @@ export type DiagramSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exten
   subRevisionName?: boolean
   diagramImageKey?: boolean
   diagramImageSourceId?: boolean
+  partsHash?: boolean
+  canonicalDiagramId?: boolean
   hotspotsJson?: boolean
   createdAt?: boolean
   updatedAt?: boolean
+  canonical?: boolean | Prisma.Diagram$canonicalArgs<ExtArgs>
   revision?: boolean | Prisma.MachineRevisionDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["diagram"]>
 
@@ -890,27 +1273,35 @@ export type DiagramSelectScalar = {
   subRevisionName?: boolean
   diagramImageKey?: boolean
   diagramImageSourceId?: boolean
+  partsHash?: boolean
+  canonicalDiagramId?: boolean
   hotspotsJson?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type DiagramOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "revisionId" | "position" | "name" | "componentCode" | "revisionLevel" | "subRevisionName" | "diagramImageKey" | "diagramImageSourceId" | "hotspotsJson" | "createdAt" | "updatedAt", ExtArgs["result"]["diagram"]>
+export type DiagramOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "revisionId" | "position" | "name" | "componentCode" | "revisionLevel" | "subRevisionName" | "diagramImageKey" | "diagramImageSourceId" | "partsHash" | "canonicalDiagramId" | "hotspotsJson" | "createdAt" | "updatedAt", ExtArgs["result"]["diagram"]>
 export type DiagramInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  canonical?: boolean | Prisma.Diagram$canonicalArgs<ExtArgs>
+  duplicates?: boolean | Prisma.Diagram$duplicatesArgs<ExtArgs>
   revision?: boolean | Prisma.MachineRevisionDefaultArgs<ExtArgs>
   lines?: boolean | Prisma.Diagram$linesArgs<ExtArgs>
   _count?: boolean | Prisma.DiagramCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type DiagramIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  canonical?: boolean | Prisma.Diagram$canonicalArgs<ExtArgs>
   revision?: boolean | Prisma.MachineRevisionDefaultArgs<ExtArgs>
 }
 export type DiagramIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  canonical?: boolean | Prisma.Diagram$canonicalArgs<ExtArgs>
   revision?: boolean | Prisma.MachineRevisionDefaultArgs<ExtArgs>
 }
 
 export type $DiagramPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "Diagram"
   objects: {
+    canonical: Prisma.$DiagramPayload<ExtArgs> | null
+    duplicates: Prisma.$DiagramPayload<ExtArgs>[]
     revision: Prisma.$MachineRevisionPayload<ExtArgs>
     lines: Prisma.$PartLinePayload<ExtArgs>[]
   }
@@ -948,6 +1339,16 @@ export type $DiagramPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
      * Original source media id (Hybris reference) — useful for re-fetch.
      */
     diagramImageSourceId: string | null
+    /**
+     * MD5 of the ordered parts list: md5(string_agg(partId||'|'||callout||'|'||qty ORDER BY callout)).
+     * Same hash = same physical diagram regardless of machine/revision context.
+     */
+    partsHash: string | null
+    /**
+     * Points to the canonical (elected) Diagram for this parts-list group.
+     * Null = this diagram IS the canonical one (or hash not yet computed).
+     */
+    canonicalDiagramId: string | null
     /**
      * `.hd3` click-hotspots inlined ({calloutId → rect}). Drives the
      * interactive parts viewer. Typical size ~1 KB.
@@ -1349,6 +1750,8 @@ readonly fields: DiagramFieldRefs;
  */
 export interface Prisma__DiagramClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
+  canonical<T extends Prisma.Diagram$canonicalArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Diagram$canonicalArgs<ExtArgs>>): Prisma.Prisma__DiagramClient<runtime.Types.Result.GetResult<Prisma.$DiagramPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+  duplicates<T extends Prisma.Diagram$duplicatesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Diagram$duplicatesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$DiagramPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   revision<T extends Prisma.MachineRevisionDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.MachineRevisionDefaultArgs<ExtArgs>>): Prisma.Prisma__MachineRevisionClient<runtime.Types.Result.GetResult<Prisma.$MachineRevisionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   lines<T extends Prisma.Diagram$linesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Diagram$linesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PartLinePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
@@ -1389,6 +1792,8 @@ export interface DiagramFieldRefs {
   readonly subRevisionName: Prisma.FieldRef<"Diagram", 'String'>
   readonly diagramImageKey: Prisma.FieldRef<"Diagram", 'String'>
   readonly diagramImageSourceId: Prisma.FieldRef<"Diagram", 'String'>
+  readonly partsHash: Prisma.FieldRef<"Diagram", 'String'>
+  readonly canonicalDiagramId: Prisma.FieldRef<"Diagram", 'String'>
   readonly hotspotsJson: Prisma.FieldRef<"Diagram", 'Json'>
   readonly createdAt: Prisma.FieldRef<"Diagram", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"Diagram", 'DateTime'>
@@ -1790,6 +2195,49 @@ export type DiagramDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.Inter
    * Limit how many Diagrams to delete.
    */
   limit?: number
+}
+
+/**
+ * Diagram.canonical
+ */
+export type Diagram$canonicalArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Diagram
+   */
+  select?: Prisma.DiagramSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Diagram
+   */
+  omit?: Prisma.DiagramOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.DiagramInclude<ExtArgs> | null
+  where?: Prisma.DiagramWhereInput
+}
+
+/**
+ * Diagram.duplicates
+ */
+export type Diagram$duplicatesArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Diagram
+   */
+  select?: Prisma.DiagramSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Diagram
+   */
+  omit?: Prisma.DiagramOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.DiagramInclude<ExtArgs> | null
+  where?: Prisma.DiagramWhereInput
+  orderBy?: Prisma.DiagramOrderByWithRelationInput | Prisma.DiagramOrderByWithRelationInput[]
+  cursor?: Prisma.DiagramWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.DiagramScalarFieldEnum | Prisma.DiagramScalarFieldEnum[]
 }
 
 /**

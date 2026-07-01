@@ -37,6 +37,7 @@ enum OemCatalogSource {
   PDF                 // factory parts-book PDFs extracted via pdfplumber/fitz
   WEIDEMANN_ESERVICE  // service.weidemann.de — dealer-gated agricultural BOMs
   LSENGINEERS         // lsengineers.co.uk Magento BOMs (big-equipment fill)
+  AVSPARE_COM         // avspare.com — third-party aftermarket catalog (Hitachi, Komatsu, Cat, JD)
   MANUAL              // hand-entered fallback
 }
 
@@ -215,6 +216,15 @@ model Diagram {
   /// Original source media id (Hybris reference) — useful for re-fetch.
   diagramImageSourceId  String?
 
+  /// MD5 of the ordered parts list: md5(string_agg(partId||'|'||callout||'|'||qty ORDER BY callout)).
+  /// Same hash = same physical diagram regardless of machine/revision context.
+  partsHash             String?
+  /// Points to the canonical (elected) Diagram for this parts-list group.
+  /// Null = this diagram IS the canonical one (or hash not yet computed).
+  canonicalDiagramId    String?
+  canonical             Diagram?  @relation("DiagramCanonical", fields: [canonicalDiagramId], references: [id], onDelete: SetNull)
+  duplicates            Diagram[] @relation("DiagramCanonical")
+
   /// `.hd3` click-hotspots inlined ({calloutId → rect}). Drives the
   /// interactive parts viewer. Typical size ~1 KB.
   hotspotsJson          Json?
@@ -228,6 +238,8 @@ model Diagram {
   @@unique([revisionId, componentCode])
   @@index([revisionId])
   @@index([componentCode])
+  @@index([partsHash])
+  @@index([canonicalDiagramId])
 }
 
 // ─── Parts ────────────────────────────────────────────────────────────────────

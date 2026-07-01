@@ -67,7 +67,21 @@ type Assembly = {
 const assemblyCache = new Map<number, Assembly>();
 
 function stripTags(html: string): string {
-  return html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#\d+;/g, "").trim();
+  return html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&#\d+;/g, "").trim();
+}
+
+// The assembly name is the bare text node right after the (hidden) breadcrumb div
+// closes and before the breadcrumb-toggle <img>:
+//   <div id="breadcrumb" ...>...</div>Service kit&nbsp;<img ...>
+function extractName(html: string): string {
+  let m = html.match(/id="breadcrumb"[\s\S]*?<\/div>([^<]*?)<img/);
+  if (m && stripTags(m[1])) return clean(m[1]);
+  m = html.match(/id="contHeader"[^>]*>([\s\S]*?)<img/);
+  return m ? clean(m[1]) : "";
+}
+
+function clean(s: string): string {
+  return stripTags(s).replace(/\\\s*/g, "").replace(/\s+/g, " ").trim();
 }
 
 function parseTdCells(trHtml: string): string[] {
@@ -85,9 +99,7 @@ async function walkAssembly(id: number, tok: string, depth = 0): Promise<Assembl
 
   const html = await get(`${BASE}/action.php?func=printAssembly&id=${id}&highlite=null&tok=${tok}`);
 
-  // Extract assembly name from header
-  const nameMatch = html.match(/id="contHeader"[^>]*>([\s\S]*?)<\/div>/);
-  const name = stripTags(nameMatch?.[1] ?? "").replace(/\\\s*/g, "").replace(/\s+/g, " ").trim();
+  const name = extractName(html);
 
   const parts: Part[] = [];
   const subIds: number[] = [];
@@ -97,7 +109,9 @@ async function walkAssembly(id: number, tok: string, depth = 0): Promise<Assembl
   let trMatch;
   while ((trMatch = trRe.exec(html)) !== null) {
     const trHtml = trMatch[1];
-    const onclickMatch = trHtml.match(/goTo\(0,\s*(\d+)/);
+    // Sub-assembly drill-down rows use goTo(catalogIdx, assemblyId) — the first
+    // arg is the active catalog index (0 for 10er, 2 for 12er, ...), not always 0.
+    const onclickMatch = trHtml.match(/goTo\(\d+,\s*(\d+)/);
     const cells = parseTdCells(trHtml);
 
     if (onclickMatch) {
@@ -156,6 +170,20 @@ function parseCatalogsAndMachines(html: string): { catalogs: CatalogInfo[]; mach
   return { catalogs, machines };
 }
 
+// Top-level machine models in the active catalog's nav tree are at margin-left:15px;
+// sub-assembly groups (cooling, axles, ...) are deeper (30px+) and skipped here.
+// sId_N is the assembly id to walk for that model.
+function parseModels(html: string, catalogName: string): MachineInfo[] {
+  const models: MachineInfo[] = [];
+  const re = /id="sId_(\d+)"[^>]*margin-left:\s*15px[\s\S]{0,600}?class="navDesc" title="([^"]+)"/g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const name = m[2].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim();
+    models.push({ assemblyId: parseInt(m[1]), name, catalog: catalogName });
+  }
+  return models;
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -170,64 +198,62 @@ async function main() {
 
   for (const cat of catalogs) {
     console.log(`\n── Catalog ${cat.idx}: ${cat.name} ──`);
-    assemblyCache.clear(); // IDs restart per catalog
+    assemblyCache.clear(); // assembly IDs restart per catalog
 
-    // Switch to this catalog — follow the redirect chain to get the new tok
+    // Switch to this catalog — the load response carries the new nav tree
     let catTok = tok;
+    let models: MachineInfo[] = [];
     try {
       const loadHtml = await get(
         `${BASE}/action.php?func=load&catalog=${cat.idx}&cL=&uL=en&action=0&tok=${tok}`
       );
       catTok = extractTok(loadHtml) ?? tok;
-      // The load response is the new index page — get a fresh tok from it
-      const refreshHtml = await get(`${BASE}/index.php`);
-      catTok = extractTok(refreshHtml) ?? catTok;
+      models = parseModels(loadHtml, cat.name);
+      if (models.length === 0) {
+        // Fall back to a fresh index page
+        const refreshHtml = await get(`${BASE}/index.php`);
+        catTok = extractTok(refreshHtml) ?? catTok;
+        models = parseModels(refreshHtml, cat.name);
+      }
     } catch (e) {
       console.log(`  Could not switch catalog: ${e}`);
+      continue;
     }
 
-    // Walk the catalog starting from assembly id=1 (root of each catalog)
-    // Probe a few IDs until we stop getting valid assemblies
-    let id = 1;
-    let emptyStreak = 0;
-    while (emptyStreak < 3) {
-      const outFile = path.join(OUT_DIR, `${cat.name}_id${id}.jsonl`);
+    if (models.length === 0) {
+      console.log(`  No machine models found — skipping`);
+      continue;
+    }
+    console.log(`  ${models.length} models`);
+
+    for (const model of models) {
+      const safe = model.name.replace(/[/\\:*?"<>|]/g, "_").slice(0, 80);
+      const outFile = path.join(OUT_DIR, `${cat.name}__${safe}.jsonl`);
+      // Resume: skip only if a previous run captured real parts. Re-walk files
+      // left at 0 parts by an earlier (buggy) run.
       if (fs.existsSync(outFile)) {
-        console.log(`  id=${id}: Already done — skipping`);
-        id++; emptyStreak = 0;
-        continue;
+        try {
+          const prev = JSON.parse(fs.readFileSync(outFile, "utf-8"));
+          if (countParts(prev.tree) > 0) {
+            console.log(`  [${model.assemblyId}] "${model.name}": Already done — skipping`);
+            continue;
+          }
+        } catch { /* fall through and re-walk */ }
       }
 
       try {
-        const html = await get(`${BASE}/action.php?func=printAssembly&id=${id}&highlite=null&tok=${catTok}`);
-        // Check if it's a valid assembly (has a real header, not an error)
-        if (!html.includes("scTblDiv") && !html.includes("contBody")) {
-          emptyStreak++;
-          id++;
-          continue;
-        }
-        emptyStreak = 0;
-
-        const assembly = await walkAssembly(id, catTok);
-        if (countParts(assembly) === 0 && assembly.subAssemblies.length === 0) {
-          id++; continue;
-        }
-
-        const safeName = assembly.name.replace(/[/\\:*?"<>|]/g, "_").slice(0, 60);
-        const finalOut = path.join(OUT_DIR, `${cat.name}_${safeName}.jsonl`);
-        fs.writeFileSync(finalOut, JSON.stringify({
+        const assembly = await walkAssembly(model.assemblyId, catTok);
+        const parts = countParts(assembly);
+        fs.writeFileSync(outFile, JSON.stringify({
           catalog: cat.name,
-          machine: assembly.name,
-          assemblyId: id,
+          machine: model.name,
+          assemblyId: model.assemblyId,
           tree: assembly,
         }) + "\n");
-        console.log(`  id=${id} "${assembly.name}": ${countParts(assembly)} parts → ${path.basename(finalOut)}`);
+        console.log(`  [${model.assemblyId}] "${model.name}": ${parts} parts → ${path.basename(outFile)}`);
       } catch (e) {
-        console.error(`  id=${id}: Error ${e}`);
-        emptyStreak++;
+        console.error(`  [${model.assemblyId}] "${model.name}": Error ${e}`);
       }
-
-      id++;
       await sleep(200);
     }
   }

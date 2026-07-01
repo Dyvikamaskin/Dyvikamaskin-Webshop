@@ -131,6 +131,8 @@ export const DiagramScalarFieldEnum = {
   subRevisionName: 'subRevisionName',
   diagramImageKey: 'diagramImageKey',
   diagramImageSourceId: 'diagramImageSourceId',
+  partsHash: 'partsHash',
+  canonicalDiagramId: 'canonicalDiagramId',
   hotspotsJson: 'hotspotsJson',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'

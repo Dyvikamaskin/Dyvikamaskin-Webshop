@@ -16,6 +16,43 @@ Phases 0–9 of the Dyvika storefront live in production. v4.2 storefront
 redesign still queued unchanged. OEM catalog BOM walk is **in progress**
 (see § below).
 
+## End-of-session state (1 July) — 7-phase DB restructuring COMPLETE, Supabase OEM populated
+
+### What happened this session (30 June – 1 July)
+
+| Area | Outcome |
+|---|---|
+| **Phase 4 — Elect canonicals** | `scripts/oem-ingest/04-elect-canonicals.ts` — 19,770 hash groups processed, 19,770 elected, 449,710 duplicates pointed. Election priority: `diagramImageKey IS NOT NULL` → `PartLine count DESC` → `id ASC`. |
+| **Phase 5 — Delete duplicate PartLines** | `scripts/oem-ingest/05-delete-duplicate-partlines.ts` — 7,086,518 rows deleted in 10k batches. PartLines now only exist on canonical diagrams. |
+| **Phase 6 — Image dedup** | `scripts/oem-ingest/06-dedup-images.ts` — NULLed `diagramImageKey` on 443,109 non-canonical diagrams; deleted 8,472 PNG + 2,313 WebP orphan files from disk. |
+| **Phase 6b — Delete non-canonical Diagram rows** | `scripts/oem-ingest/06b-delete-noncanonical-diagrams.ts` — 449,710 rows deleted, then VACUUM FULL. Diagram: 500 MB → 14 MB, PartLine: 1,664 MB → 97 MB. |
+| **Local DB size after restructuring** | ~471 MB total (down from 2.5 GB before phases 4–6b). Original target was ~165 MB; delta is Weidemann + extra LS data added after estimate. |
+| **Phase 7 — Push to Supabase OEM** | `scripts/oem-ingest/07-push-to-supabase.ts` — pushed all 8 tables. Counts: Machine 6,304 · Part 100,452 · MachineRevision 47,079 · Diagram 25,755 · PartLine 514,980 · PartCompatibility 76,225 · PartListing 1,409 · PartPriceSnapshot 200,386. |
+| **Supabase schema migrations applied** | Added `Diagram.partsHash`, `Diagram.canonicalDiagramId` (+ indexes), `MachineRevision.bomSource`, `OemCatalogSource.AVSPARE_COM` enum value — all via MCP before push. |
+| **Bug fix: .env.local override** | `.env.local` was overriding `OEM_DIRECT_URL` to localhost, causing push script to write to local DB instead of Supabase. Fixed in `07-push-to-supabase.ts`: capture Supabase URL from `.env` before loading `.env.local`. |
+
+### 7-phase DB restructuring plan — ALL DONE
+
+| Phase | Status | Notes |
+|---|---|---|
+| 1 — Complete ingest (eParts + LS + Weidemann) | 🟢 Done | All three sources ingested. 475,019 diagrams, 7.6M PartLines pre-dedup. |
+| 2 — Add partsHash + canonicalDiagramId to schema | 🟢 Done | `scripts/oem-ingest/migrate-add-parts-hash.ts` |
+| 3 — Backfill partsHash | 🟢 Done | 475,019 diagrams hashed. `scripts/oem-ingest/03-backfill-parts-hash.ts` |
+| 4 — Elect canonical diagrams | 🟢 Done | 19,770 groups elected, 449,710 duplicates pointed. `04-elect-canonicals.ts` |
+| 5 — Delete duplicate PartLines | 🟢 Done | 7,086,518 rows deleted → 514,980 remain. `05-delete-duplicate-partlines.ts` |
+| 6 — Image dedup + non-canonical Diagram rows | 🟢 Done | 8,472 PNG + 2,313 WebP deleted. 449,710 Diagram rows deleted. VACUUM FULL run. |
+| 7 — Push to Supabase OEM | 🟢 Done | All 8 tables pushed. `07-push-to-supabase.ts` |
+
+### Remaining OEM backlog (post-restructuring)
+
+- **LS Engineers missing ingest scripts**: Vibrating Rollers, Tower Lights, Compaction, Concreting — data already in `data/lsengineers_diagrams.jsonl`, just need scripts modelled on `01-excavators.ts`
+- **LS Engineers image download**: `scripts/oem-ingest/lsengineers/02-download-images.ts` never run
+- **AVSpare ingest**: `~/Downloads/hitachi_zx210_parts.jsonl` + `avspare_browser_output.jsonl` — only 1 stub machine in DB, schema decision needed (see `data/recon_avspare.md`)
+- **eParts missing images**: Some diagrams have no `diagramImageKey` — re-run `04-download-diagrams.ts`
+- **Storefront integration**: OEM Explorer at `/oem-explorer` is a dev tool; production search/viewer not built yet — see `docs/oem/PLAN.md` Phase 8
+
+---
+
 ## End-of-session state (29 June) — LS ingest extended + Weidemann walk started
 
 ### What happened this session (29 June)

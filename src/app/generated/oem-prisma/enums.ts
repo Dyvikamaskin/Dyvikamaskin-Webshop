@@ -14,6 +14,7 @@ export const OemCatalogSource = {
   PDF: 'PDF',
   WEIDEMANN_ESERVICE: 'WEIDEMANN_ESERVICE',
   LSENGINEERS: 'LSENGINEERS',
+  AVSPARE_COM: 'AVSPARE_COM',
   MANUAL: 'MANUAL'
 } as const
 
